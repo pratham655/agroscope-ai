@@ -132,14 +132,16 @@ export default function SynchronizedChangeMap({
       const t1 = L.tileLayer(url1, {
         attribution: "NASA GIBS / Terra",
         opacity: 0.95,
-        maxZoom: 14,
+        maxZoom: 18,
+        maxNativeZoom: activeLayer === "osm" ? 18 : 9,
       }).addTo(m1);
       tile1Ref.current = t1;
 
       const t2 = L.tileLayer(url2, {
         attribution: "NASA GIBS / Terra",
         opacity: 0.95,
-        maxZoom: 14,
+        maxZoom: 18,
+        maxNativeZoom: activeLayer === "osm" ? 18 : 9,
       }).addTo(m2);
       tile2Ref.current = t2;
 
@@ -207,13 +209,15 @@ export default function SynchronizedChangeMap({
       const t1 = L.tileLayer(url1, {
         attribution: "NASA GIBS / Terra",
         opacity: 0.95,
-        maxZoom: 14,
+        maxZoom: 18,
+        maxNativeZoom: activeLayer === "osm" ? 18 : 9,
       }).addTo(m1);
 
       const t2 = L.tileLayer(url2, {
         attribution: "NASA GIBS / Terra",
         opacity: 0.95,
-        maxZoom: 14,
+        maxZoom: 18,
+        maxNativeZoom: activeLayer === "osm" ? 18 : 9,
       }).addTo(m2);
 
       t1.on("loading", () => setLoading1(true));

@@ -38,6 +38,10 @@ _SYSTEM_PROMPT = (
     "7. Keep responses concise and practical (max ~350 words).\n"
     "8. Structure each response as: Evidence from NASA data | Recommendation | "
     "Confidence and caveats.\n"
+    "9. You operate globally for arbitrary valid coordinates worldwide. Never assume "
+    "a default geography or benchmark location. Respect the local hemisphere: "
+    "in the Southern Hemisphere (latitude < 0), seasonal cycles are inverted (summer is Dec–Feb, "
+    "winter is Jun–Aug). Tailor all agronomic advice to the specific location and selected crop.\n"
 )
 
 
@@ -66,10 +70,22 @@ def _build_context_block(ctx: dict[str, Any]) -> str:
 
     loc = ctx.get("location", {})
     if loc.get("label"):
-        lines.append(
-            f"Location : {loc['label']} "
-            f"({loc.get('latitude', '?')}N, {loc.get('longitude', '?')}E)"
-        )
+        lat_v = loc.get("latitude")
+        lon_v = loc.get("longitude")
+        if isinstance(lat_v, (int, float)) and isinstance(lon_v, (int, float)):
+            lat_dir = "N" if lat_v >= 0 else "S"
+            lon_dir = "E" if lon_v >= 0 else "W"
+            hemi = "Southern Hemisphere" if lat_v < 0 else "Northern Hemisphere"
+            lines.append(
+                f"Location : {loc['label']} "
+                f"({lat_v}°{lat_dir}, {lon_v}°{lon_dir} — {hemi})"
+            )
+        else:
+            lines.append(f"Location : {loc['label']} ({lat_v}N, {lon_v}E)")
+
+    crop_target = ctx.get("crop") or ctx.get("selected_crop")
+    if crop_target:
+        lines.append(f"Target Crop : {crop_target}")
 
     period = ctx.get("period", {})
     if period.get("start"):

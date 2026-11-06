@@ -82,12 +82,17 @@ https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{YYYY-MM-DD}/
 
 ### Layers Used in AGROSCOPE AI
 
-| Layer Identifier | Product Name | Resolution | Sensor | Temporal Coverage |
-|-----------------|-------------|-----------|--------|-------------------|
-| `MODIS_Terra_CorrectedReflectance_Bands721` | Terra MODIS Bands 7-2-1 (Agricultural False Colour) | 250m | Terra MODIS | 2000-02-24 to present |
-| `MODIS_Terra_CorrectedReflectance_TrueColor` | Terra MODIS True Colour | 250m | Terra MODIS | 2000-02-24 to present |
-| `VIIRS_SNPP_CorrectedReflectance_TrueColor` | VIIRS/S-NPP True Colour | 375m | Suomi NPP VIIRS | 2015-11-24 to present |
-| `MODIS_Aqua_CorrectedReflectance_TrueColor` | Aqua MODIS True Colour | 250m | Aqua MODIS | 2002-07-04 to present |
+| Layer Identifier | Product Name | Resolution | Sensor | TileMatrixSet | Format | Temporal Coverage |
+|-----------------|-------------|-----------|--------|---------------|--------|-------------------|
+| `MODIS_Terra_CorrectedReflectance_TrueColor` | Terra MODIS True Colour | 250m | Terra MODIS | `GoogleMapsCompatible_Level9` | JPEG | 2000-02-24 to present |
+| `MODIS_Terra_CorrectedReflectance_Bands721` | Terra MODIS Bands 7-2-1 (Agricultural False Colour) | 250m | Terra MODIS | `GoogleMapsCompatible_Level9` | JPEG | 2000-02-24 to present |
+| `MODIS_Terra_NDVI_8Day` | Terra MODIS NDVI 8-Day Composite | 250m | Terra MODIS | `GoogleMapsCompatible_Level9` | PNG | 2000-02-18 to present |
+| `MODIS_Terra_Land_Surface_Temp_Day` | Terra MODIS Land Surface Temperature (Daytime) | 1km | Terra MODIS | `GoogleMapsCompatible_Level7` | PNG | 2000-02-24 to present |
+| `IMERG_Precipitation_Rate_30min` | GPM IMERG Precipitation Rate | 0.1° (~10km) | GPM Constellation | `GoogleMapsCompatible_Level6` | PNG | 2014-03-12 to present |
+| `SMAP_L3_Passive_Day_Soil_Moisture` | SMAP Radiometer Soil Moisture (Daytime) | 9km | SMAP | `GoogleMapsCompatible_Level6` | PNG | 2015-03-31 to present |
+| `MODIS_Aqua_CorrectedReflectance_TrueColor` | Aqua MODIS True Colour | 250m | Aqua MODIS | `GoogleMapsCompatible_Level9` | JPEG | 2002-07-04 to present |
+| `VIIRS_NOAA20_CorrectedReflectance_TrueColor` | VIIRS NOAA-20 True Colour | 375m | NOAA-20 VIIRS | `GoogleMapsCompatible_Level9` | JPEG | 2018-01-05 to present |
+| CARTO Voyager Topography | Standard Topographic Base Map | Parcel-level | CARTO / OpenStreetMap | Web Mercator | PNG | Continuous live updates |
 
 ### Band Interpretation (Bands 7-2-1)
 The Bands 7-2-1 false-colour composite is designed specifically for **agricultural land cover discrimination**:

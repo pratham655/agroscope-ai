@@ -63,7 +63,7 @@ print("PIPELINE OK — all indicators computed successfully")
 
 # Assertions
 assert 0 <= stress["score"] <= 100,           "Stress score out of range"
-assert len(crops) == 6,                        "Expected 6 crops"
+assert len(crops) >= 6,                        "Expected at least 6 crops"
 assert all(0 <= c["score"] <= 100 for c in crops), "Crop score out of range"
 assert len(spi3) == len(precip),               "SPI length mismatch"
 assert total_gdd > 0,                          "GDD must be positive"

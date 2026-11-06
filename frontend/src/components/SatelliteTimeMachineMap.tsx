@@ -85,7 +85,8 @@ export default function SatelliteTimeMachineMap({
 
       const url = getGibsTileUrl(layer, date);
       const newLayer = L.tileLayer(url, {
-        maxZoom: 9,
+        maxZoom: 18,
+        maxNativeZoom: 9,
         minZoom: 1,
         attribution: "NASA Global Imagery Browse Services (GIBS)",
       });
@@ -128,9 +129,19 @@ export default function SatelliteTimeMachineMap({
         zoomControl: true,
       });
 
+      // Base map underlay
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        attribution: "© OpenStreetMap contributors, © CARTO",
+        subdomains: "abcd",
+        opacity: 0.35,
+        maxZoom: 18,
+        maxNativeZoom: 18,
+      }).addTo(map);
+
       const url = getGibsTileUrl(activeLayer, currentDate);
       const tileLayer = L.tileLayer(url, {
-        maxZoom: 9,
+        maxZoom: 18,
+        maxNativeZoom: 9,
         minZoom: 1,
         attribution: "NASA GIBS &bull; EOSDIS &bull; Earth Science Data",
       }).addTo(map);

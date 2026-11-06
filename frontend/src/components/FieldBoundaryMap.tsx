@@ -75,7 +75,8 @@ export default function FieldBoundaryMap({
       const satLayer = L.tileLayer(getLayerUrl(activeLayer), {
         attribution: "NASA GIBS / Terra",
         opacity: 0.95,
-        maxZoom: 15,
+        maxZoom: 18,
+        maxNativeZoom: activeLayer === "osm" ? 18 : 9,
       }).addTo(map);
       currentTileRef.current = satLayer;
 
@@ -163,7 +164,8 @@ export default function FieldBoundaryMap({
       const newLayer = L.tileLayer(getLayerUrl(mode), {
         attribution: "NASA GIBS / Terra",
         opacity: 0.95,
-        maxZoom: 15,
+        maxZoom: 18,
+        maxNativeZoom: mode === "osm" ? 18 : 9,
       });
       if (mapRef.current) {
         newLayer.addTo(mapRef.current);

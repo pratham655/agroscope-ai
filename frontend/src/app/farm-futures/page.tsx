@@ -28,6 +28,8 @@ import {
   type GeocodeLocation,
 } from "@/lib/api";
 import ScenarioCharts from "@/components/ScenarioCharts";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 // Dynamically import Leaflet map to prevent SSR window issues
 const SimulationMap = dynamic(() => import("@/components/SimulationMap"), {
@@ -40,21 +42,25 @@ const SimulationMap = dynamic(() => import("@/components/SimulationMap"), {
   ),
 });
 
-// Demo Agricultural Regions Presets
+// Global Agricultural Benchmark Presets
 const DEMO_LOCATIONS = [
   { label: "Kansas Wheat Belt, USA", lat: 38.34, lon: -98.12, region: "North America" },
-  { label: "Iowa Corn Belt, USA", lat: 41.85, lon: -93.62, region: "North America" },
   { label: "Punjab Plain, India", lat: 30.73, lon: 76.78, region: "South Asia" },
-  { label: "São Paulo State, Brazil", lat: -22.5, lon: -48.0, region: "South America" },
-  { label: "Sahel Zone, Burkina Faso", lat: 12.0, lon: 2.5, region: "Sub-Saharan Africa" },
+  { label: "Chennai Agro-District, India", lat: 13.0827, lon: 80.2707, region: "South Asia" },
+  { label: "São Paulo State, Brazil", lat: -23.5505, lon: -46.6333, region: "South America" },
+  { label: "Nairobi Basin, Kenya", lat: -1.2921, lon: 36.8219, region: "East Africa" },
+  { label: "Sydney / Murray Basin, Australia", lat: -33.8688, lon: 151.2093, region: "Oceania" },
+  { label: "Iowa Corn Belt, USA", lat: 41.85, lon: -93.62, region: "North America" },
   { label: "California Central Valley, USA", lat: 36.75, lon: -119.77, region: "North America" },
 ];
 
 export default function FarmFuturesPage() {
+  const { currentLocation } = useLocation();
+
   // Selected location coordinates and label
-  const [lat, setLat] = useState("38.34");
-  const [lon, setLon] = useState("-98.12");
-  const [locationLabel, setLocationLabel] = useState("Kansas Wheat Belt, USA");
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
+  const [locationLabel, setLocationLabel] = useState(() => (currentLocation ? currentLocation.label : "Kansas Wheat Belt, USA"));
   const [startDate, setStartDate] = useState("2023-01-01");
   const [endDate, setEndDate] = useState("2023-12-31");
 
@@ -293,6 +299,9 @@ export default function FarmFuturesPage() {
           </div>
         </div>
       </div>
+
+      {/* Persistent Global Location Intelligence Bar */}
+      <GlobalLocationBar />
 
       {/* ── Location & Spatial Intelligence Workspace ──────────────── */}
       <div className="bg-white rounded-3xl p-6 sm:p-7 border border-[#dce8da] shadow-xs space-y-6">

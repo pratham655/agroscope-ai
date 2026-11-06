@@ -25,6 +25,7 @@ from app.api import (
     phenology,
     risk_radar,
     field_boundary,
+    location,
 )
 from app.core.config import settings
 
@@ -71,6 +72,7 @@ app.include_router(water_intelligence.router, prefix="/api/water",             t
 app.include_router(phenology.router,          prefix="/api/phenology",          tags=["Crop Phenology Tracker"])
 app.include_router(risk_radar.router,         prefix="/api/risk",               tags=["Regional Agricultural Risk Radar"])
 app.include_router(field_boundary.router,     prefix="/api/field",              tags=["Field Boundary Intelligence"])
+app.include_router(location.router,           prefix="/api/location",           tags=["Universal Location Intelligence"])
 
 
 @app.get("/api/health")

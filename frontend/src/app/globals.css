@@ -100,6 +100,17 @@ body {
   border: 1px solid var(--border-subtle);
 }
 
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: #0f1f14 !important;
+  font-family: inherit;
+}
+
+.leaflet-tile-pane {
+  z-index: 200;
+}
+
 /* ── Animations ─────────────────────────────────────────── */
 @keyframes pulse-green {
   0%, 100% { opacity: 1; }

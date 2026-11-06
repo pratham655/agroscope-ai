@@ -99,8 +99,12 @@ async def _analyze_location(lat: float, lon: float, label: str,
     soil_mean  = sm_result["root_zone"]["mean"] or 0.4
 
     ndvi_proxy   = [min(1.0, max(0.0, 0.1 + 0.5 * (r / 0.5))) for r in gwetroot]
-    ndvi_anomaly = sum(ndvi_proxy) / len(ndvi_proxy) - 0.45 if ndvi_proxy else 0.0
-    temp_anomaly = mean_temp - 15.0
+    ndvi_base    = sum(ndvi_proxy) / max(len(ndvi_proxy), 1) if ndvi_proxy else 0.4
+    ndvi_recent  = sum(ndvi_proxy[-30:]) / max(len(ndvi_proxy[-30:]), 1) if len(ndvi_proxy) >= 30 else ndvi_base
+    ndvi_anomaly = ndvi_recent - ndvi_base
+
+    t_recent     = sum(t2m[-30:]) / max(len(t2m[-30:]), 1) if len(t2m) >= 30 else mean_temp
+    temp_anomaly = t_recent - mean_temp
 
     stress = compute_stress_score(spi_recent, ndvi_anomaly, soil_mean, temp_anomaly)
 

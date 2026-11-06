@@ -65,7 +65,9 @@ async def fetch_daily_power(
     _validate_coords(latitude, longitude)
     _validate_dates(start, end)
 
-    cache_key = f"daily|{latitude}|{longitude}|{start}|{end}|{parameters}"
+    lat_r = round(latitude, 4)
+    lon_r = round(longitude, 4)
+    cache_key = f"daily|{lat_r}|{lon_r}|{start}|{end}|{parameters}"
     if cache_key in _cache:
         logger.info("POWER cache hit: %s", cache_key)
         return _cache[cache_key]
@@ -119,7 +121,9 @@ async def fetch_monthly_power(
     """Fetch monthly climatology data from NASA POWER."""
     _validate_coords(latitude, longitude)
 
-    cache_key = f"monthly|{latitude}|{longitude}|{start_year}|{end_year}|{parameters}"
+    lat_r = round(latitude, 4)
+    lon_r = round(longitude, 4)
+    cache_key = f"monthly|{lat_r}|{lon_r}|{start_year}|{end_year}|{parameters}"
     if cache_key in _cache:
         return _cache[cache_key]
 
@@ -190,24 +194,32 @@ def _demo_daily_data(lat: float, lon: float, start: date, end: date) -> Dict[str
     days = (end - start).days + 1
     dates_list = [(start + timedelta(days=i)).strftime("%Y%m%d") for i in range(days)]
 
-    # Seasonal temperature signal
+    # Seasonal temperature signal adjusted for hemisphere & latitude
     doy_arr = np.array([(start + timedelta(days=i)).timetuple().tm_yday for i in range(days)])
-    temp_base = 15 + 10 * np.sin((doy_arr - 80) * 2 * np.pi / 365)
+    phase_shift = 80 if lat >= 0 else 262  # Invert seasonal phase for Southern Hemisphere
+    amplitude = 10.0 if abs(lat) > 23.5 else 4.0
+    base_mean = 15.0 if abs(lat) > 23.5 else 26.0
+    temp_base = base_mean + amplitude * np.sin((doy_arr - phase_shift) * 2 * np.pi / 365)
     noise     = rng.normal(0, 2, days)
 
-    t2m     = (temp_base + noise).tolist()
-    t2m_min = (temp_base + noise - 5).tolist()
-    t2m_max = (temp_base + noise + 5).tolist()
-    prec    = np.clip(rng.exponential(2.0, days), 0, 60).tolist()
-    rh      = np.clip(rng.normal(65, 15, days), 20, 100).tolist()
-    sol     = np.clip(10 + 8 * np.sin((doy_arr - 80) * 2 * np.pi / 365) + rng.normal(0, 2, days), 2, 30).tolist()
-    gwettop = np.clip(0.4 + rng.normal(0, 0.1, days), 0, 1).tolist()
+    t2m      = (temp_base + noise).tolist()
+    t2m_min  = (temp_base + noise - 5).tolist()
+    t2m_max  = (temp_base + noise + 5).tolist()
+    prec     = np.clip(rng.exponential(2.0, days), 0, 60).tolist()
+    rh       = np.clip(rng.normal(65, 15, days), 20, 100).tolist()
+    sol      = np.clip(12 + 6 * np.sin((doy_arr - phase_shift) * 2 * np.pi / 365) + rng.normal(0, 2, days), 2, 30).tolist()
+    gwettop  = np.clip(0.40 + rng.normal(0, 0.08, days), 0.05, 0.95).tolist()
+    gwetroot = np.clip(0.38 + rng.normal(0, 0.06, days), 0.08, 0.95).tolist()
+    gwetprof = np.clip(0.42 + rng.normal(0, 0.05, days), 0.10, 0.95).tolist()
 
     param_data: Dict[str, Any] = {}
     for key, vals in [
         ("T2M", t2m), ("T2M_MIN", t2m_min), ("T2M_MAX", t2m_max),
         ("PRECTOTCORR", prec), ("RH2M", rh),
-        ("ALLSKY_SFC_SW_DWN", sol), ("GWETTOP", gwettop),
+        ("ALLSKY_SFC_SW_DWN", sol),
+        ("GWETTOP", gwettop),
+        ("GWETROOT", gwetroot),
+        ("GWETPROF", gwetprof),
     ]:
         param_data[key] = {d: round(v, 3) for d, v in zip(dates_list, vals)}
 

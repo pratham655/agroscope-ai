@@ -13,8 +13,10 @@ export interface ExplorerMapProps {
 
 export type GibsLayerKey =
   | "modis_terra_truecolor"
-  | "modis_aqua_truecolor"
   | "modis_bands721"
+  | "modis_ndvi"
+  | "modis_lst"
+  | "modis_aqua_truecolor"
   | "viirs_truecolor"
   | "imerg_precip"
   | "osm_topo";
@@ -27,8 +29,9 @@ export interface LayerMetadata {
   format: "jpg" | "png";
   level: string;
   layerId?: string;
+  maxNativeZoom: number;
   description: string;
-  paletteType: "rgb" | "agriculture" | "radar" | "vector";
+  paletteType: "rgb" | "agriculture" | "radar" | "vector" | "ndvi" | "lst";
 }
 
 export const SATELLITE_LAYERS: LayerMetadata[] = [
@@ -40,6 +43,7 @@ export const SATELLITE_LAYERS: LayerMetadata[] = [
     format: "jpg",
     level: "GoogleMapsCompatible_Level9",
     layerId: "MODIS_Terra_CorrectedReflectance_TrueColor",
+    maxNativeZoom: 9,
     description: "Natural photorealistic view of planetary land surfaces, vegetative cover, and cloud patterns.",
     paletteType: "rgb",
   },
@@ -51,8 +55,33 @@ export const SATELLITE_LAYERS: LayerMetadata[] = [
     format: "jpg",
     level: "GoogleMapsCompatible_Level9",
     layerId: "MODIS_Terra_CorrectedReflectance_Bands721",
+    maxNativeZoom: 9,
     description: "Specially calibrated for agriculture: active healthy vegetation appears in vibrant green, bare soil in tan/brown, and standing water in dark black/blue.",
     paletteType: "agriculture",
+  },
+  {
+    key: "modis_ndvi",
+    name: "NASA MODIS NDVI (Vegetation)",
+    sensor: "Terra / MODIS (MOD13Q1)",
+    resolution: "250m / 8-day rolling",
+    format: "png",
+    level: "GoogleMapsCompatible_Level9",
+    layerId: "MODIS_Terra_NDVI_8Day",
+    maxNativeZoom: 9,
+    description: "Normalized Difference Vegetation Index representing photosynthetic canopy chlorophyll and vegetative biomass.",
+    paletteType: "ndvi",
+  },
+  {
+    key: "modis_lst",
+    name: "NASA Land Surface Temp (LST)",
+    sensor: "Terra / MODIS (MOD11A1)",
+    resolution: "1km / daytime daily",
+    format: "png",
+    level: "GoogleMapsCompatible_Level7",
+    layerId: "MODIS_Terra_Land_Surface_Temp_Day",
+    maxNativeZoom: 7,
+    description: "Radiometric land surface skin temperature calibrated during Terra morning equatorial transit.",
+    paletteType: "lst",
   },
   {
     key: "modis_aqua_truecolor",
@@ -62,6 +91,7 @@ export const SATELLITE_LAYERS: LayerMetadata[] = [
     format: "jpg",
     level: "GoogleMapsCompatible_Level9",
     layerId: "MODIS_Aqua_CorrectedReflectance_TrueColor",
+    maxNativeZoom: 9,
     description: "Afternoon diurnal orbital pass capturing peak thermal boundary layer and agricultural evapotranspiration.",
     paletteType: "rgb",
   },
@@ -73,6 +103,7 @@ export const SATELLITE_LAYERS: LayerMetadata[] = [
     format: "jpg",
     level: "GoogleMapsCompatible_Level9",
     layerId: "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+    maxNativeZoom: 9,
     description: "High-radiometric-fidelity visible Earth imagery with enhanced atmospheric correction.",
     paletteType: "rgb",
   },
@@ -84,16 +115,18 @@ export const SATELLITE_LAYERS: LayerMetadata[] = [
     format: "png",
     level: "GoogleMapsCompatible_Level6",
     layerId: "IMERG_Precipitation_Rate_30min",
+    maxNativeZoom: 6,
     description: "Real-time rainfall and storm precipitation intensity over agricultural watersheds.",
     paletteType: "radar",
   },
   {
     key: "osm_topo",
-    name: "OpenStreetMap High-Resolution Carto",
-    sensor: "Global Vector Cartography",
+    name: "CARTO Voyager Topography",
+    sensor: "CARTO & OpenStreetMap",
     resolution: "Parcel-level",
     format: "png",
     level: "Vector",
+    maxNativeZoom: 18,
     description: "Geographic administrative borders, watercourses, rural road networks, and field boundaries.",
     paletteType: "vector",
   },
@@ -101,7 +134,7 @@ export const SATELLITE_LAYERS: LayerMetadata[] = [
 
 function buildGibsUrl(layer: LayerMetadata, dateStr: string): string {
   if (layer.key === "osm_topo") {
-    return "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+    return "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
   }
   const dateFormatted = dateStr && dateStr.length === 10 ? dateStr : "default";
   return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer.layerId}/default/${dateFormatted}/${layer.level}/{z}/{y}/{x}.${layer.format}`;
@@ -176,10 +209,12 @@ export default function EarthExplorerMap({
       L.control.zoom({ position: "topright" }).addTo(map);
 
       // Base Topo layer underneath
-      const baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors",
+      const baseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        attribution: "© OpenStreetMap contributors, © CARTO",
+        subdomains: "abcd",
         opacity: 0.35,
         maxZoom: 18,
+        maxNativeZoom: 18,
       }).addTo(map);
       baseTileRef.current = baseLayer;
 
@@ -188,7 +223,8 @@ export default function EarthExplorerMap({
       const satLayer = L.tileLayer(initUrl, {
         attribution: "NASA GIBS / Earthdata",
         opacity: activeLayerKey === "osm_topo" ? 1.0 : 0.95,
-        maxZoom: 14,
+        maxZoom: 18,
+        maxNativeZoom: activeLayer.maxNativeZoom,
       }).addTo(map);
       gibsTileRef.current = satLayer;
 
@@ -257,9 +293,10 @@ export default function EarthExplorerMap({
 
       const newUrl = buildGibsUrl(activeLayer, selectedDate);
       const newSat = L.tileLayer(newUrl, {
-        attribution: activeLayerKey === "osm_topo" ? "© OpenStreetMap contributors" : "NASA GIBS / Earthdata",
+        attribution: activeLayerKey === "osm_topo" ? "© OpenStreetMap contributors, © CARTO" : "NASA GIBS / Earthdata",
         opacity: activeLayerKey === "osm_topo" ? 1.0 : 0.95,
-        maxZoom: 14,
+        maxZoom: 18,
+        maxNativeZoom: activeLayer.maxNativeZoom,
       }).addTo(map);
 
       newSat.on("loading", () => setTileLoading(true));

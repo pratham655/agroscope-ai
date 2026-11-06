@@ -446,7 +446,121 @@ CROP_PROFILES: Dict[str, Dict[str, Any]] = {
         "benefits": ["Drought-tolerant", "Deep taproot breaks hardpan", "Good rotational crop"],
         "risks": ["Sclerotinia risk", "Bird pressure at maturity"],
     },
+    "rice": {
+        "name": "Paddy / Lowland Rice",
+        "gdd_required": 1300,
+        "t_base_c": 10,
+        "t_optimal_c": 30,
+        "water_need_mm": 900,
+        "soil_drainage": "heavy/poorly-drained",
+        "benefits": ["Staple cereal across tropical/monsoonal basins", "High caloric productivity"],
+        "risks": ["Extreme water demand", "Methane emissions in anaerobic conditions", "Heat sterility at anthesis"],
+    },
+    "cotton": {
+        "name": "Upland Cotton",
+        "gdd_required": 1400,
+        "t_base_c": 15,
+        "t_optimal_c": 32,
+        "water_need_mm": 650,
+        "soil_drainage": "deep/well-drained",
+        "benefits": ["High commercial value", "Deep taproot", "Heat tolerant"],
+        "risks": ["High pest pressure (bollworm)", "Sensitive to waterlogging and early frost"],
+    },
+    "barley": {
+        "name": "Spring / Winter Barley",
+        "gdd_required": 750,
+        "t_base_c": 0,
+        "t_optimal_c": 20,
+        "water_need_mm": 280,
+        "soil_drainage": "well-drained",
+        "benefits": ["Early maturity", "High drought and salinity tolerance", "Breaks weed cycles"],
+        "risks": ["Lodging under high fertility", "Foliar diseases in humid conditions"],
+    },
+    "chickpea": {
+        "name": "Chickpea (Gram)",
+        "gdd_required": 850,
+        "t_base_c": 5,
+        "t_optimal_c": 24,
+        "water_need_mm": 250,
+        "soil_drainage": "well-drained",
+        "benefits": ["Symbiotic nitrogen fixation", "Thrives on residual moisture", "Low input cost"],
+        "risks": ["Ascochyta blight in wet weather", "Pod borer damage"],
+    },
+    "millet": {
+        "name": "Pearl / Finger Millet",
+        "gdd_required": 900,
+        "t_base_c": 12,
+        "t_optimal_c": 33,
+        "water_need_mm": 240,
+        "soil_drainage": "sandy/well-drained",
+        "benefits": ["Extreme drought and heat tolerance", "Nutrient dense", "Thrives on marginal soils"],
+        "risks": ["Lower cash return in humid areas", "Susceptible to grain mold if rains at harvest"],
+    },
+    "potato": {
+        "name": "Potato",
+        "gdd_required": 800,
+        "t_base_c": 7,
+        "t_optimal_c": 19,
+        "water_need_mm": 450,
+        "soil_drainage": "loose/friable/well-drained",
+        "benefits": ["Very high yield per hectare", "Good cash crop in rotational systems"],
+        "risks": ["Late blight risk", "High sensitivity to soil compaction and high night temperatures"],
+    },
 }
+
+
+# ─── Global Hemispheric & Seasonal Helpers ─────────────────────────────────────
+
+def is_southern_hemisphere(latitude: float) -> bool:
+    """Return True if the coordinate is in the Southern Hemisphere."""
+    return latitude < 0.0
+
+
+def get_crop_t_base(crop_id_or_name: str) -> float:
+    """Look up base temperature for a crop; default to 10.0°C if unknown."""
+    norm = crop_id_or_name.lower().strip()
+    for cid, prof in CROP_PROFILES.items():
+        if cid in norm or prof["name"].lower() in norm or norm in prof["name"].lower():
+            return float(prof.get("t_base_c", 10.0))
+    return 10.0
+
+
+def get_seasonal_growth_window(latitude: float, crop_id: str = "wheat") -> Dict[str, Any]:
+    """
+    Determine the primary agricultural growing season window based on hemisphere.
+
+    Northern Hemisphere:
+      - Warm-season crops (maize, soy, cotton): Spring–Autumn (Apr–Oct; DOY ~90–300)
+      - Cool-season crops (winter wheat, barley): Autumn–Spring (Nov–May)
+    Southern Hemisphere (lat < 0):
+      - Warm-season crops: Austral Spring–Autumn (Oct–Apr; crosses year-end)
+      - Cool-season crops: Austral Autumn–Spring (May–Oct)
+    """
+    southern = is_southern_hemisphere(latitude)
+    crop_info = CROP_PROFILES.get(crop_id.lower(), {})
+    is_cool_season = crop_info.get("t_base_c", 10) <= 5
+
+    if southern:
+        if is_cool_season:
+            season_name = "Austral Winter / Cool Season (May–Oct)"
+            peak_months = [6, 7, 8]
+        else:
+            season_name = "Austral Summer / Main Season (Oct–Apr)"
+            peak_months = [12, 1, 2]
+    else:
+        if is_cool_season:
+            season_name = "Boreal Winter / Rabi Season (Nov–Apr)"
+            peak_months = [1, 2, 3]
+        else:
+            season_name = "Boreal Summer / Kharif Season (May–Oct)"
+            peak_months = [6, 7, 8]
+
+    return {
+        "is_southern_hemisphere": southern,
+        "hemisphere_label": "Southern Hemisphere" if southern else "Northern Hemisphere",
+        "season_name": season_name,
+        "peak_months": peak_months,
+    }
 
 
 def score_crop_rotation(

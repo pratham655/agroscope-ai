@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 import Nav from "@/components/Nav";
+import { LocationProvider } from "@/context/LocationContext";
+import GlobalLocationModal from "@/components/GlobalLocationModal";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -17,8 +20,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-[#f8faf5]">
-        <Nav />
-        <main>{children}</main>
+        <LocationProvider>
+          <Nav />
+          <main>{children}</main>
+          <GlobalLocationModal />
+        </LocationProvider>
       </body>
     </html>
   );
