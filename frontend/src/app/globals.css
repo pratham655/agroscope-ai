@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #f8faf5;
+  --bg-card: #ffffff;
+  --text-primary: #1a2e1a;
+  --text-secondary: #4a6741;
+  --accent-green: #2d7a3a;
+  --accent-earth: #8b5e3c;
+  --accent-sky: #1e6fa8;
+  --accent-amber: #c4860a;
+  --border-subtle: #e2ece0;
+  --nasa-blue: #0b3d91;
+  --nasa-red: #fc3d21;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Typography ─────────────────────────────────────────── */
+.heading-display {
+  font-size: clamp(2.25rem, 5vw, 3.75rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.heading-section {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* ── Cards ──────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 24px rgba(45, 122, 58, 0.08);
+  border-color: #c5dfc2;
+}
+
+/* ── Demo badge ─────────────────────────────────────────── */
+.demo-badge {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ── Stress level colours ───────────────────────────────── */
+.stress-low      { color: #16a34a; }
+.stress-moderate { color: #65a30d; }
+.stress-elevated { color: #ca8a04; }
+.stress-high     { color: #ea580c; }
+.stress-severe   { color: #dc2626; }
+
+/* ── NDVI gradient bar ──────────────────────────────────── */
+.ndvi-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #dc2626, #fbbf24, #86efac, #16a34a, #166534);
+}
+
+/* ── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c5dfc2; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a3c9a0; }
+
+/* ── Map container ──────────────────────────────────────── */
+.map-container {
+  position: relative;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.animate-pulse-green {
+  animation: pulse-green 2s ease-in-out infinite;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out;
+}
+
+/* ── Recharts overrides ─────────────────────────────────── */
+.recharts-tooltip-wrapper {
+  border-radius: 0.75rem !important;
+  overflow: hidden;
+}
