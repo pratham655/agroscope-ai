@@ -101,6 +101,24 @@ class TestGDD:
         cum = cumulative_gdd(t_max, t_min, t_base=10)
         assert all(v == pytest.approx(0.0) for v in cum)
 
+    def test_none_values_safe(self):
+        """Regression test: missing or pending NASA observations mapped to None must not crash GDD calculation."""
+        assert calculate_gdd(None, 15.0, t_base=10) == 0.0
+        assert calculate_gdd(25.0, None, t_base=10) == 0.0
+        assert calculate_gdd(None, None, t_base=10) == 0.0
+
+    def test_nan_values_safe(self):
+        assert calculate_gdd(float("nan"), 15.0, t_base=10) == 0.0
+        assert calculate_gdd(25.0, float("nan"), t_base=10) == 0.0
+
+    def test_cumulative_with_trailing_none(self):
+        t_max = [25.0, 27.0, None, None]
+        t_min = [15.0, 14.0, None, None]
+        cum = cumulative_gdd(t_max, t_min, t_base=10)
+        assert len(cum) == 4
+        assert cum[2] == cum[1]  # No additional accumulation for None days
+        assert cum[3] == cum[1]
+
 
 # ─── SPI ─────────────────────────────────────────────────────────────────────
 

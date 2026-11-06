@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function GlobalLocationBar({ className = "", compact = false }: Props) {
-  const { currentLocation, formattedCoords, hemisphereLabel, openModal, useCurrentLocationGps } = useLocation();
+  const { currentLocation, formattedCoords, hemisphereLabel, openModal, acquireGpsLocation } = useLocation();
 
   if (compact) {
     return (
@@ -75,7 +75,7 @@ export default function GlobalLocationBar({ className = "", compact = false }: P
           </div>
 
           <button
-            onClick={() => useCurrentLocationGps().catch(() => openModal())}
+            onClick={() => acquireGpsLocation().catch(() => openModal())}
             className="p-2 rounded-xl border border-[#d2e4d0] bg-white hover:bg-[#f0f7ee] text-gray-600 hover:text-[#2d7a3a] transition-colors"
             title="Use Device GPS Location"
           >

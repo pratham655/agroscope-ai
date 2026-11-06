@@ -35,6 +35,7 @@ interface LocationContextType {
   presets: BenchmarkPreset[];
   searchLocations: (q: string) => Promise<GeocodeLocation[]>;
   reverseGeocode: (lat: number, lon: number) => Promise<ReverseGeocodeResult>;
+  acquireGpsLocation: () => Promise<CanonicalLocation>;
   useCurrentLocationGps: () => Promise<CanonicalLocation>;
   formattedCoords: string;
   hemisphereLabel: string;
@@ -78,6 +79,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           parsed.longitude >= -180 &&
           parsed.longitude <= 180
         ) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setCurrentLocationState((prev) => ({ ...prev, ...parsed }));
         }
       }
@@ -155,7 +157,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     return reverseGeocodeLocation(lat, lon);
   }, []);
 
-  const useCurrentLocationGps = useCallback(async (): Promise<CanonicalLocation> => {
+  const acquireGpsLocation = useCallback(async (): Promise<CanonicalLocation> => {
     return new Promise((resolve, reject) => {
       if (typeof window === "undefined" || !navigator.geolocation) {
         reject(new Error("Browser geolocation is not supported in this environment."));
@@ -229,7 +231,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       presets,
       searchLocations,
       reverseGeocode,
-      useCurrentLocationGps,
+      acquireGpsLocation,
+      useCurrentLocationGps: acquireGpsLocation,
       formattedCoords,
       hemisphereLabel,
     }),
@@ -243,7 +246,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       presets,
       searchLocations,
       reverseGeocode,
-      useCurrentLocationGps,
+      acquireGpsLocation,
       formattedCoords,
       hemisphereLabel,
     ]

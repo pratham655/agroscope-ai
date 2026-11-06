@@ -332,3 +332,40 @@ def test_field_boundary_polygon():
     assert "analysis" in data
     assert "spatial_resolution_disclaimer" in data
 
+
+def test_analyze_field_arbitrary_coords_chennai():
+    """Verify arbitrary global coordinates (Chennai) are analyzed without falling back to Kansas or Punjab."""
+    r = client.get("/api/field-intelligence/analyze", params={
+        "latitude":   13.0827,
+        "longitude":  80.2707,
+        "start_date": "2024-01-01",
+        "end_date":   "2024-06-30",
+        "label":      "Chennai Field",
+    })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["location"]["latitude"] == pytest.approx(13.0827)
+    assert data["location"]["longitude"] == pytest.approx(80.2707)
+    assert data["location"]["label"] == "Chennai Field"
+    assert "valid_days" in data["period"]
+    assert "finalized_pct" in data["period"]
+
+
+def test_analyze_field_present_date_handling():
+    """Verify query extending to current date handles trailing unfinalized observations safely."""
+    from datetime import date, timedelta
+    today = date.today()
+    start = today - timedelta(days=90)
+    r = client.get("/api/field-intelligence/analyze", params={
+        "latitude":   -22.5,
+        "longitude":  -48.0,
+        "start_date": start.isoformat(),
+        "end_date":   today.isoformat(),
+        "label":      "Sao Paulo Present Test",
+    })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["period"]["days"] == 91
+    assert data["period"]["valid_days"] > 0
+    assert any("📍 Analysis covers" in f for f in data["key_findings"])
+

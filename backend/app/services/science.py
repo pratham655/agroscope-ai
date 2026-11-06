@@ -76,7 +76,7 @@ def interpret_ndvi(ndvi: float) -> Dict[str, str]:
                 "description": "Very high biomass. Tropical forest or peak-season crop canopy."}
 
 
-def smooth_ndvi_series(ndvi_values: List[float], window: int = 5) -> List[float]:
+def smooth_ndvi_series(ndvi_values: List[Any], window: int = 5) -> List[float]:
     """
     Apply Savitzky-Golay filter to NDVI time series.
 
@@ -85,7 +85,11 @@ def smooth_ndvi_series(ndvi_values: List[float], window: int = 5) -> List[float]
 
     Reference: Chen et al. (2004) — Remote Sensing of Environment.
     """
-    arr = np.array(ndvi_values, dtype=float)
+    if not ndvi_values:
+        return []
+    raw = [float(v) if v is not None and not np.isnan(v) else np.nan for v in ndvi_values]
+    s = pd.Series(raw, dtype=float).interpolate(method="linear", limit_direction="both").fillna(0.3)
+    arr = s.to_numpy()
     if len(arr) < window:
         return arr.tolist()
     smoothed = savgol_filter(arr, window_length=window, polyorder=2)
@@ -106,7 +110,8 @@ def compute_ndvi_anomaly(ndvi_series: List[float], baseline_series: List[float])
 
 # ─── Growing Degree Days ──────────────────────────────────────────────────────
 
-def calculate_gdd(t_max: float, t_min: float, t_base: float = 10.0, t_cap: float = 30.0) -> float:
+def calculate_gdd(t_max: Optional[float], t_min: Optional[float],
+                  t_base: float = 10.0, t_cap: float = 30.0) -> float:
     """
     Growing Degree Day (GDD) for one day.
 
@@ -118,15 +123,24 @@ def calculate_gdd(t_max: float, t_min: float, t_base: float = 10.0, t_cap: float
     T_base: 10°C — common base for maize, sorghum, soybeans
     T_cap:  30°C — maximum effective temperature (plateau)
     """
-    t_max_eff = min(t_max, t_cap)
-    t_min_eff = max(t_min, t_base)
+    if t_max is None or t_min is None:
+        return 0.0
+    try:
+        mx = float(t_max)
+        mn = float(t_min)
+        if np.isnan(mx) or np.isnan(mn):
+            return 0.0
+    except (ValueError, TypeError):
+        return 0.0
+    t_max_eff = min(mx, t_cap)
+    t_min_eff = max(mn, t_base)
     if t_max_eff < t_min_eff:
         return 0.0
     t_avg = (t_max_eff + t_min_eff) / 2.0
     return max(t_avg - t_base, 0.0)
 
 
-def cumulative_gdd(t_max_series: List[float], t_min_series: List[float],
+def cumulative_gdd(t_max_series: List[Optional[float]], t_min_series: List[Optional[float]],
                    t_base: float = 10.0) -> List[float]:
     """Cumulative GDD over a growing season."""
     gdds = [calculate_gdd(mx, mn, t_base) for mx, mn in zip(t_max_series, t_min_series)]
@@ -238,8 +252,9 @@ def analyze_soil_moisture(
     # heuristic — it is NOT from a peer-reviewed study specific to MERRA-2 and
     # should be treated as configurable rather than a validated published value.
     DRY_THRESHOLD = 0.25
-    dry_periods = int(np.sum(root < DRY_THRESHOLD)) if len(root) > 0 else 0
-    pct_dry = round(dry_periods / max(len(root), 1) * 100, 1)
+    valid_root = root[~np.isnan(root)]
+    dry_periods = int(np.sum(valid_root < DRY_THRESHOLD)) if len(valid_root) > 0 else 0
+    pct_dry = round(dry_periods / max(len(valid_root), 1) * 100, 1)
 
     return {
         "surface":  top_stats,

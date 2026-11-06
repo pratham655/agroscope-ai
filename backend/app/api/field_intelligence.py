@@ -14,6 +14,7 @@ This is the primary endpoint for the hackathon demo.
 
 from fastapi import APIRouter, Query, HTTPException
 from datetime import date, datetime, timedelta
+from typing import Any, List, Optional
 import numpy as np
 import logging
 
@@ -27,6 +28,24 @@ from app.services.nasa_gibs import get_tile_url, get_all_layer_metadata
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def safe_round(val: Any, decimals: int = 2) -> Optional[float]:
+    """Safely round values handling None, NaN, inf, and strings."""
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        if np.isnan(f) or np.isinf(f):
+            return None
+        return round(f, decimals)
+    except (ValueError, TypeError):
+        return None
+
+
+def safe_round_list(vals: List[Any], decimals: int = 2) -> List[Optional[float]]:
+    """Safely round an entire list while preserving None positions."""
+    return [safe_round(v, decimals) for v in vals]
 
 
 @router.get("/analyze")
@@ -84,9 +103,20 @@ async def analyze_field(
     dates_gwt,  gwttop = series("GWETTOP")
     dates_gwr,  gwtroot= series("GWETROOT")
 
+    # Clean valid observation series
+    valid_t = [float(v) for v in t2m if v is not None and not np.isnan(v)]
+    valid_p = [float(v) for v in precip if v is not None and not np.isnan(v)]
+    valid_dates_t = [d for d, v in zip(dates_t, t2m) if v is not None and not np.isnan(v)]
+
+    total_requested_days = (end_date - start_date).days + 1
+    valid_days_count = len(valid_dates_t)
+    last_finalized_date = valid_dates_t[-1] if valid_dates_t else None
+    finalized_pct = round(valid_days_count / max(total_requested_days, 1) * 100, 1)
+
     # ── SPI-3 ────────────────────────────────────────────────────────────────
-    spi3_vals = calculate_spi(precip, timescale=3) if len(precip) >= 3 else []
-    spi3_recent = float(np.nanmean([v for v in spi3_vals[-30:] if v and not np.isnan(v)])) \
+    precip_clean_for_spi = [float(v) if v is not None and not np.isnan(v) else np.nan for v in precip]
+    spi3_vals = calculate_spi(precip_clean_for_spi, timescale=3) if len(precip) >= 3 else []
+    spi3_recent = float(np.nanmean([v for v in spi3_vals[-30:] if v is not None and not np.isnan(v)])) \
                   if spi3_vals else float("nan")
 
     # ── GDD (base 10°C) ──────────────────────────────────────────────────────
@@ -100,24 +130,29 @@ async def analyze_field(
     soil_analysis = {}
     if gwttop and gwtroot:
         soil_analysis = analyze_soil_moisture(gwttop, gwtroot)
-    mean_soil_wetness = float(np.nanmean(gwtroot)) if gwtroot else 0.4
+    valid_root = [float(v) for v in gwtroot if v is not None and not np.isnan(v)]
+    mean_soil_wetness = float(np.mean(valid_root)) if valid_root else 0.4
 
     # ── Temperature anomaly (vs. period mean) ────────────────────────────────
-    t_mean_period = float(np.nanmean(t2m)) if t2m else 15.0
-    t_recent      = float(np.nanmean(t2m[-30:])) if len(t2m) >= 30 else t_mean_period
+    t_mean_period = float(np.mean(valid_t)) if valid_t else 15.0
+    t_recent      = float(np.mean(valid_t[-30:])) if len(valid_t) >= 30 else t_mean_period
     temp_anomaly  = t_recent - t_mean_period
 
     # ── NDVI proxy ────────────────────────────────────────────────────────────
     ndvi_proxy_vals: list = []
     ndvi_anomaly_val = 0.0
     if sol and gwttop:
-        sol_arr  = np.array(sol,    dtype=float)
-        gwet_arr = np.array(gwttop, dtype=float)
-        sol_max  = np.nanmax(sol_arr) or 1.0
-        raw_ndvi = 0.1 + 0.75 * (sol_arr / sol_max) * np.clip(gwet_arr, 0, 1)
+        sol_clean = [float(v) if v is not None and not np.isnan(v) else np.nan for v in sol]
+        gwet_clean = [float(v) if v is not None and not np.isnan(v) else np.nan for v in gwttop]
+        sol_arr  = np.array(sol_clean, dtype=float)
+        gwet_arr = np.array(gwet_clean, dtype=float)
+        sol_max  = np.nanmax(sol_arr) if np.any(~np.isnan(sol_arr)) else 1.0
+        sol_max  = sol_max if sol_max > 0 else 1.0
+        raw_ndvi = 0.1 + 0.75 * (sol_arr / sol_max) * np.clip(np.nan_to_num(gwet_arr, nan=0.3), 0, 1)
         ndvi_proxy_vals = smooth_ndvi_series(np.clip(raw_ndvi, 0.05, 0.90).tolist(), window=7)
-        baseline = float(np.nanmean(ndvi_proxy_vals))
-        recent   = float(np.nanmean(ndvi_proxy_vals[-30:])) if len(ndvi_proxy_vals) >= 30 else baseline
+        valid_ndvi = [v for v in ndvi_proxy_vals if v is not None and not np.isnan(v)]
+        baseline = float(np.mean(valid_ndvi)) if valid_ndvi else 0.35
+        recent   = float(np.mean(valid_ndvi[-30:])) if len(valid_ndvi) >= 30 else baseline
         ndvi_anomaly_val = recent - baseline
 
     # ── Multi-indicator stress score ──────────────────────────────────────────
@@ -129,8 +164,8 @@ async def analyze_field(
     )
 
     # ── Crop rotation scoring ─────────────────────────────────────────────────
-    total_precip_mm = float(np.sum(precip)) if precip else 0.0
-    mean_temp       = float(np.nanmean(t2m)) if t2m else 18.0
+    total_precip_mm = float(np.sum(valid_p)) if valid_p else 0.0
+    mean_temp       = float(np.mean(valid_t)) if valid_t else 18.0
     crop_scores     = score_crop_rotation(
         cumulative_gdd  = cumulative_gdd_val,
         total_precip_mm = total_precip_mm,
@@ -140,10 +175,10 @@ async def analyze_field(
     )
 
     # ── Climate trends ────────────────────────────────────────────────────────
-    temp_trend   = linear_trend(t2m)   if t2m   else {}
-    precip_trend = linear_trend(precip) if precip else {}
+    temp_trend   = linear_trend(valid_t) if len(valid_t) >= 3 else {}
+    precip_trend = linear_trend(valid_p) if len(valid_p) >= 3 else {}
 
-    # ── Key findings (explainable) ────────────────────────────────────────────
+    # ── Key findings (explainable) ────────────────────────────────────
     findings = []
 
     total_prec_str = f"{total_precip_mm:.0f} mm" if total_precip_mm > 0 else "unavailable"
@@ -151,6 +186,13 @@ async def analyze_field(
         f"📍 Analysis covers {label} (lat={latitude:.3f}, lon={longitude:.3f}) "
         f"from {start_date} to {end_date} using NASA POWER Agroclimatology data."
     )
+
+    if valid_days_count < total_requested_days:
+        findings.append(
+            f"ℹ️ Data Availability: {valid_days_count} of {total_requested_days} requested days "
+            f"({finalized_pct}%) have finalized NASA POWER observations (latest observation: {last_finalized_date}). "
+            "Recent pending days have been filtered out automatically."
+        )
 
     if not np.isnan(spi3_recent):
         spi_str = f"{spi3_recent:+.2f}"
@@ -253,44 +295,47 @@ async def analyze_field(
         "period": {
             "start": str(start_date),
             "end":   str(end_date),
-            "days":  (end_date - start_date).days + 1,
+            "days":  total_requested_days,
+            "valid_days": valid_days_count,
+            "finalized_until": str(last_finalized_date) if last_finalized_date else None,
+            "finalized_pct": finalized_pct,
         },
         "is_demo":     is_demo,
         "demo_notice": raw.get("_demo_notice", ""),
         "climate": {
             "temperature": {
                 "dates":       dates_t,
-                "values":      [round(v, 2) for v in t2m],
+                "values":      safe_round_list(t2m, 2),
                 "unit":        "°C",
                 "source":      "NASA POWER T2M",
-                "mean":        round(float(np.nanmean(t2m)), 2) if t2m else None,
+                "mean":        safe_round(t_mean_period, 2),
                 "trend":       temp_trend,
             },
             "precipitation": {
                 "dates":       dates_p,
-                "values":      [round(v, 2) for v in precip],
+                "values":      safe_round_list(precip, 2),
                 "unit":        "mm/day",
                 "source":      "NASA POWER PRECTOTCORR",
-                "total_mm":    round(total_precip_mm, 1),
+                "total_mm":    safe_round(total_precip_mm, 1),
                 "trend":       precip_trend,
             },
             "humidity": {
                 "dates":  dates_rh,
-                "values": [round(v, 1) for v in rh2m],
+                "values": safe_round_list(rh2m, 1),
                 "unit":   "%",
                 "source": "NASA POWER RH2M",
             },
             "solar": {
                 "dates":  dates_sol,
-                "values": [round(v, 2) for v in sol],
+                "values": safe_round_list(sol, 2),
                 "unit":   "MJ/m²/day",
                 "source": "NASA POWER ALLSKY_SFC_SW_DWN",
             },
             "spi_3": {
                 "dates":  dates_p,
-                "values": [round(v, 3) if not np.isnan(v) else None for v in spi3_vals],
+                "values": [safe_round(v, 3) for v in spi3_vals],
                 "unit":   "standard deviations",
-                "recent": round(spi3_recent, 3) if not np.isnan(spi3_recent) else None,
+                "recent": safe_round(spi3_recent, 3),
                 "reference": "McKee et al. (1993)",
                 "proxy_notice": (
                     "Calculated from daily NASA POWER precipitation using a 3-day rolling window. "
@@ -301,23 +346,23 @@ async def analyze_field(
             },
             "gdd": {
                 "dates":      dates_t[:len(gdd_cum)],
-                "values":     [round(v, 1) for v in gdd_cum],
+                "values":     safe_round_list(gdd_cum, 1),
                 "unit":       "°C·day",
                 "t_base":     10,
-                "cumulative": round(cumulative_gdd_val, 0),
+                "cumulative": safe_round(cumulative_gdd_val, 0),
                 "reference":  "McMaster & Wilhelm (1997)",
             },
         },
         "soil_moisture": {
             "surface": {
                 "dates":  dates_gwt,
-                "values": [round(v, 3) for v in gwttop],
+                "values": safe_round_list(gwttop, 3),
                 "unit":   "fraction (0–1)",
                 "source": "NASA POWER GWETTOP",
             },
             "root_zone": {
                 "dates":  dates_gwr,
-                "values": [round(v, 3) for v in gwtroot],
+                "values": safe_round_list(gwtroot, 3),
                 "unit":   "fraction (0–1)",
                 "source": "NASA POWER GWETROOT",
             },
@@ -326,8 +371,8 @@ async def analyze_field(
         },
         "vegetation_proxy": {
             "dates":       dates_sol[:len(ndvi_proxy_vals)],
-            "values":      [round(v, 4) for v in ndvi_proxy_vals],
-            "anomaly":     round(ndvi_anomaly_val, 4),
+            "values":      safe_round_list(ndvi_proxy_vals, 4),
+            "anomaly":     safe_round(ndvi_anomaly_val, 4),
             "unit":        "proxy NDVI (0–1)",
             "is_proxy":    True,
             "proxy_notice": (

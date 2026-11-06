@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   MapPin,
   Search,
@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { analyzeField, type FieldReport } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 import ClimateCharts from "@/components/charts/ClimateCharts";
 import StressGauge from "@/components/StressGauge";
 import CropRanking from "@/components/CropRanking";
@@ -24,17 +26,19 @@ import FindingsPanel from "@/components/FindingsPanel";
 import GIBSLayerInfo from "@/components/GIBSLayerInfo";
 
 const DEMO_LOCATIONS = [
+  { label: "Chennai, Tamil Nadu, India", lat: 13.0827, lon: 80.2707, crop: "Rice / Groundnut" },
   { label: "Kansas Wheat Belt, USA", lat: 38.34, lon: -98.12, crop: "Wheat" },
-  { label: "Punjab, India", lat: 30.73, lon: 76.78, crop: "Rice / Wheat" },
+  { label: "Punjab Plain, India", lat: 30.73, lon: 76.78, crop: "Rice / Wheat" },
   { label: "São Paulo State, Brazil", lat: -22.5, lon: -48.0, crop: "Soybeans" },
-  { label: "Nile Delta, Egypt", lat: 30.5, lon: 31.2, crop: "Cotton" },
+  { label: "Nairobi, Kenya", lat: -1.2921, lon: 36.8219, crop: "Maize / Beans" },
   { label: "Murray-Darling Basin, AU", lat: -34.5, lon: 145.5, crop: "Barley" },
 ];
 
 export default function AnalyzePage() {
-  const [lat, setLat] = useState("");
-  const [lon, setLon] = useState("");
-  const [label, setLabel] = useState("");
+  const { currentLocation, setLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation?.latitude ? String(currentLocation.latitude) : ""));
+  const [lon, setLon] = useState(() => (currentLocation?.longitude ? String(currentLocation.longitude) : ""));
+  const [label, setLabel] = useState(() => currentLocation?.label || "");
   const [startDate, setStart] = useState(() => {
     const d = new Date();
     d.setFullYear(d.getFullYear() - 1);
@@ -44,6 +48,52 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<FieldReport | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const urlLat = sp.get("lat");
+      const urlLon = sp.get("lon");
+      const urlLabel = sp.get("label");
+      const autorun = sp.get("autorun");
+      if (urlLat && urlLon) {
+        /* eslint-disable react-hooks/set-state-in-effect */
+        setLat(urlLat);
+        setLon(urlLon);
+        if (urlLabel) setLabel(urlLabel);
+        /* eslint-enable react-hooks/set-state-in-effect */
+        if (autorun === "true") {
+          const latN = parseFloat(urlLat);
+          const lonN = parseFloat(urlLon);
+          if (!isNaN(latN) && !isNaN(lonN)) {
+            setLoading(true);
+            analyzeField({
+              latitude: latN,
+              longitude: lonN,
+              startDate,
+              endDate,
+              label: urlLabel || "Selected Location",
+            }).then((data) => {
+              setReport(data);
+              setLoading(false);
+            }).catch((err) => {
+              setError(err instanceof Error ? err.message : "Analysis failed");
+              setLoading(false);
+            });
+          }
+        }
+        return;
+      }
+    }
+
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+      setLabel(currentLocation.label || `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}`);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+  }, [currentLocation, startDate, endDate]);
 
   const run = useCallback(async () => {
     const latN = parseFloat(lat),
@@ -70,20 +120,32 @@ export default function AnalyzePage() {
         longitude: lonN,
         startDate,
         endDate,
-        label: label || "Selected Location",
+        label: label || `${latN.toFixed(4)}°, ${lonN.toFixed(4)}°`,
       });
       setReport(data);
+      setLocation({
+        latitude: latN,
+        longitude: lonN,
+        label: label || data.location.label || `${latN.toFixed(4)}°, ${lonN.toFixed(4)}°`,
+        startDate,
+        endDate,
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Analysis failed. Is the backend running?");
     } finally {
       setLoading(false);
     }
-  }, [lat, lon, label, startDate, endDate]);
+  }, [lat, lon, label, startDate, endDate, setLocation]);
 
   const prefill = (loc: typeof DEMO_LOCATIONS[0]) => {
     setLat(String(loc.lat));
     setLon(String(loc.lon));
     setLabel(loc.label);
+    setLocation({
+      latitude: loc.lat,
+      longitude: loc.lon,
+      label: loc.label,
+    });
   };
 
   return (
@@ -133,9 +195,12 @@ export default function AnalyzePage() {
       </div>
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Global Location Bar */}
+        <GlobalLocationBar />
+
         {/* Input Form Bar */}
-        <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs mb-8 space-y-4">
+        <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
@@ -144,7 +209,7 @@ export default function AnalyzePage() {
               <input
                 value={lat}
                 onChange={(e) => setLat(e.target.value)}
-                placeholder="e.g. 38.34"
+                placeholder="e.g. 13.0827"
                 className="w-full px-3.5 py-2.5 text-sm bg-gray-50/50 border border-[#e2ece0] rounded-xl outline-none focus:ring-2 focus:ring-[#2d7a3a] focus:bg-white transition"
               />
             </div>
@@ -155,7 +220,7 @@ export default function AnalyzePage() {
               <input
                 value={lon}
                 onChange={(e) => setLon(e.target.value)}
-                placeholder="e.g. -98.12"
+                placeholder="e.g. 80.2707"
                 className="w-full px-3.5 py-2.5 text-sm bg-gray-50/50 border border-[#e2ece0] rounded-xl outline-none focus:ring-2 focus:ring-[#2d7a3a] focus:bg-white transition"
               />
             </div>
@@ -250,6 +315,11 @@ export default function AnalyzePage() {
                   <p className="text-xs text-[#4a6741] font-mono">
                     {report.location.latitude.toFixed(4)}°N, {report.location.longitude.toFixed(4)}°E &bull;{" "}
                     {report.period.start} to {report.period.end} ({report.period.days} days)
+                    {report.period.valid_days !== undefined && report.period.valid_days < report.period.days && (
+                      <span className="text-amber-700 font-semibold ml-2">
+                        &bull; {report.period.valid_days} days finalized ({report.period.finalized_pct}%)
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>

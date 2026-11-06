@@ -7,15 +7,12 @@ import {
   MapPin,
   Navigation,
   Globe2,
-  Clock,
   Bookmark,
   Check,
   AlertCircle,
-  Calendar,
-  Sparkles,
   Compass,
 } from "lucide-react";
-import { useLocation, type CanonicalLocation } from "@/context/LocationContext";
+import { useLocation } from "@/context/LocationContext";
 import { type GeocodeLocation } from "@/lib/api";
 
 const GLOBAL_CROPS = [
@@ -47,7 +44,7 @@ export default function GlobalLocationModal() {
     presets,
     searchLocations,
     reverseGeocode,
-    useCurrentLocationGps,
+    acquireGpsLocation,
     formattedCoords,
     hemisphereLabel,
   } = useLocation();
@@ -78,12 +75,14 @@ export default function GlobalLocationModal() {
 
   useEffect(() => {
     if (isModalOpen) {
+      /* eslint-disable react-hooks/set-state-in-effect */
       setInputLat(String(currentLocation.latitude));
       setInputLon(String(currentLocation.longitude));
       setInputLabel(currentLocation.label);
       setSelectedCrop(currentLocation.crop || GLOBAL_CROPS[0]);
       setStartDate(currentLocation.startDate || "2023-01-01");
       setEndDate(currentLocation.endDate || "2023-12-31");
+      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [isModalOpen, currentLocation]);
 
@@ -209,7 +208,7 @@ export default function GlobalLocationModal() {
     setGpsLoading(true);
     setGpsError(null);
     try {
-      await useCurrentLocationGps();
+      await acquireGpsLocation();
       closeModal();
     } catch (err: unknown) {
       setGpsError(err instanceof Error ? err.message : "Failed to obtain GPS location.");
