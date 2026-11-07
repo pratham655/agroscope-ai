@@ -155,7 +155,7 @@ export const MAP_LAYERS: Record<MapLayerType, LayerSpec> = {
 
 function buildTileUrl(layer: LayerSpec, dateStr: string = "default"): string {
   if (layer.key === "carto_topo") {
-    return "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+    return "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
   }
   const dateFormatted = dateStr && dateStr.length === 10 ? dateStr : "default";
   return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer.layerId}/default/${dateFormatted}/${layer.matrixSet}/{z}/{y}/{x}.${layer.format}`;
@@ -228,14 +228,14 @@ export default function SimulationMap({
       // Add Zoom Control at top right
       L.control.zoom({ position: "topright" }).addTo(map);
 
-      // Add resilient base layer: CARTO Voyager with fallback
+      // Add resilient base layer: Standard OpenStreetMap (no API key required)
       const baseLayer = L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
-          attribution: "© OpenStreetMap contributors, © CARTO",
-          subdomains: "abcd",
-          maxZoom: 18,
-          maxNativeZoom: 18,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+          subdomains: ["a", "b", "c"],
+          maxZoom: 19,
+          maxNativeZoom: 19,
           opacity: activeLayerKey === "carto_topo" ? 1.0 : 0.35,
         }
       ).addTo(map);

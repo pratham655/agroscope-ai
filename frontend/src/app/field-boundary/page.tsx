@@ -2,17 +2,16 @@
 
 import { useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { MapPin, Upload, AlertTriangle, Info, Globe2, Compass, Layers } from "lucide-react";
+import { MapPin, Upload, AlertTriangle, Globe2, Compass, Layers } from "lucide-react";
 import { analyzeFieldBoundary, type BoundaryAnalysisResult } from "@/lib/api";
 import { useLocation } from "@/context/LocationContext";
-import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 const FieldBoundaryMap = dynamic(() => import("@/components/FieldBoundaryMap"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[400px] rounded-3xl bg-[#0f1f14] animate-pulse flex flex-col items-center justify-center text-white/60 gap-3 border border-[#d2e4d0]">
-      <Globe2 className="h-10 w-10 text-[#86efac] animate-spin" />
-      <div className="text-sm font-bold text-white tracking-wide">
+    <div className="w-full h-[400px] rounded-xl bg-slate-900 flex flex-col items-center justify-center text-slate-300 gap-2 border border-slate-700">
+      <Globe2 className="h-8 w-8 text-emerald-400 animate-spin" />
+      <div className="text-xs font-semibold text-white">
         Projecting Field Boundary onto NASA GIBS Surface Reflectance...
       </div>
     </div>
@@ -31,7 +30,7 @@ const PRESET_POLYGONS = [
     ],
   },
   {
-    name: "Iowa Corn Belt Demonstration Plot (95 ha)",
+    name: "Iowa Corn Demo Plot (95 ha)",
     coordinates: [
       [-93.64, 41.84],
       [-93.61, 41.84],
@@ -41,7 +40,7 @@ const PRESET_POLYGONS = [
     ],
   },
   {
-    name: "Punjab Agroforestry Parcel (120 ha)",
+    name: "Punjab Agroforestry (120 ha)",
     coordinates: [
       [76.76, 30.72],
       [76.80, 30.72],
@@ -51,7 +50,7 @@ const PRESET_POLYGONS = [
     ],
   },
   {
-    name: "California Central Valley Almond Orchard (65 ha)",
+    name: "California Almond Orchard (65 ha)",
     coordinates: [
       [-119.79, 36.73],
       [-119.76, 36.73],
@@ -84,7 +83,6 @@ export default function FieldBoundaryPage() {
     if (!currentLocation || typeof currentLocation.latitude !== "number" || typeof currentLocation.longitude !== "number") return;
     const clat = currentLocation.latitude;
     const clon = currentLocation.longitude;
-    // ~1 km square parcel around centroid
     const dlat = 0.009;
     const dlon = 0.009 / Math.max(0.1, Math.cos((clat * Math.PI) / 180));
     const coords = [
@@ -107,15 +105,14 @@ export default function FieldBoundaryPage() {
     );
   }, [currentLocation]);
 
-  // Parse coordinates safely for the map
-  const activeCoordinates = useMemo<number[][]>(() => {
+  const activeCoords = useMemo(() => {
     try {
-      const parsed = JSON.parse(geoJsonText);
-      if (parsed.type === "Polygon" && Array.isArray(parsed.coordinates)) {
-        return parsed.coordinates[0] || parsed.coordinates;
+      const obj = JSON.parse(geoJsonText);
+      if (obj.type === "Polygon" && Array.isArray(obj.coordinates)) {
+        return Array.isArray(obj.coordinates[0][0]) ? obj.coordinates[0] : obj.coordinates;
       }
     } catch {
-      // ignore
+      // fallback
     }
     return PRESET_POLYGONS[0].coordinates;
   }, [geoJsonText]);
@@ -128,7 +125,6 @@ export default function FieldBoundaryPage() {
       if (obj.type !== "Polygon" || !Array.isArray(obj.coordinates)) {
         throw new Error("Invalid GeoJSON Polygon");
       }
-      // Standardize coordinates
       const coords = Array.isArray(obj.coordinates[0][0]) ? obj.coordinates : [obj.coordinates];
       parsedGeom = { type: "Polygon", coordinates: coords };
     } catch {
@@ -150,7 +146,7 @@ export default function FieldBoundaryPage() {
     }
   }, [fieldName, geoJsonText]);
 
-  const loadPreset = (preset: typeof PRESET_POLYGONS[0]) => {
+  const loadPreset = (preset: (typeof PRESET_POLYGONS)[0]) => {
     setFieldName(preset.name);
     setGeoJsonText(
       JSON.stringify(
@@ -177,222 +173,229 @@ export default function FieldBoundaryPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Header Banner */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#dce8da] shadow-xs relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-[#2d7a3a]/10 via-[#0b3d91]/5 to-transparent rounded-full blur-2xl pointer-events-none"></div>
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#eef7ec] border border-[#d2e4d0] text-xs font-bold text-[#2d7a3a]">
-              <Compass className="h-3.5 w-3.5" />
-              <span>Geospatial Vector Intelligence · Land Surface Delineation</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-[#1a2e1a] tracking-tight">
+    <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+      {/* ── Top Bar: Page Header ────────────────────────────────────── */}
+      <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-[#0d3b2e] text-emerald-400">
+              <MapPin className="h-4 w-4" />
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
               Field Boundary Intelligence
             </h1>
-            <p className="text-sm sm:text-base text-[#4a6741] leading-relaxed">
-              Delineate custom field parcels via GeoJSON polygons. Calculate exact geodesics (hectares, perimeter,
-              and centroid) and overlay calibrated NASA POWER agroclimatology directly onto land boundaries.
-            </p>
+            <span className="text-[10px] font-semibold uppercase text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Vector Geodesics
+            </span>
           </div>
-
-          <button
-            onClick={runAnalysis}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-6 py-3.5 bg-[#2d7a3a] hover:bg-[#23602d] text-white font-bold text-sm rounded-2xl shadow-md shadow-[#2d7a3a]/20 transition disabled:opacity-50 shrink-0"
-          >
-            {loading ? (
-              <>
-                <Globe2 className="h-4 w-4 animate-spin" />
-                <span>Computing Geometry...</span>
-              </>
-            ) : (
-              <>
-                <MapPin className="h-4 w-4" />
-                <span>Analyze Parcel Geometry</span>
-              </>
-            )}
-          </button>
+          <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
+            Delineate custom field parcels via GeoJSON polygons. Calculate exact geodesics (hectares, perimeter, and centroid)
+            and overlay calibrated NASA POWER agroclimatology directly onto land boundaries.
+          </p>
         </div>
 
-        {/* Preset boundary chips */}
-        <div className="pt-6 mt-6 border-t border-[#eef4ed] flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-bold text-gray-500 mr-1 flex items-center gap-1">
-            <Layers className="h-3.5 w-3.5 text-[#2d7a3a]" /> Benchmark Agricultural Parcels:
-          </span>
-          {PRESET_POLYGONS.map((p) => (
-            <button
-              key={p.name}
-              onClick={() => loadPreset(p)}
-              className={`text-xs px-3 py-1 rounded-xl font-medium transition border ${
-                fieldName === p.name
-                  ? "bg-[#2d7a3a] text-white border-[#2d7a3a] shadow-xs"
-                  : "bg-[#f8faf7] text-gray-700 border-[#dce8da] hover:bg-[#eef7ec] hover:text-[#2d7a3a]"
-              }`}
-            >
-              {p.name}
-            </button>
-          ))}
-
-          {currentLocation && typeof currentLocation.latitude === "number" && (
-            <button
-              onClick={generateBoundaryForActiveLocation}
-              className="text-xs px-3 py-1 rounded-xl font-bold bg-[#eef7ec] text-[#2d7a3a] border border-[#d2e4d0] hover:bg-[#dce8da] transition flex items-center gap-1"
-            >
-              <Compass className="h-3.5 w-3.5" /> Delineate Active Location ({currentLocation.label})
-            </button>
+        <button
+          onClick={runAnalysis}
+          disabled={loading}
+          className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#0d3b2e] hover:bg-[#134e39] text-white text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer shrink-0"
+        >
+          {loading ? (
+            <>
+              <Globe2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+              <span>Computing Geometry...</span>
+            </>
+          ) : (
+            <>
+              <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+              <span>Analyze Parcel Geometry</span>
+            </>
           )}
-        </div>
+        </button>
       </div>
 
-      {/* Universal Global Location Context Bar */}
-      <GlobalLocationBar />
+      {/* ── Configuration Console ────────────────────────────────────── */}
+      <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5 text-[#0d3b2e]" />
+            <span>Preset Parcels &amp; Actions</span>
+          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {PRESET_POLYGONS.map((p) => (
+              <button
+                key={p.name}
+                onClick={() => loadPreset(p)}
+                className={`text-[11px] px-2 py-0.5 rounded-md border transition ${
+                  fieldName === p.name
+                    ? "bg-[#0d3b2e] text-white border-[#0d3b2e]"
+                    : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                }`}
+              >
+                {p.name.split(" (")[0]}
+              </button>
+            ))}
 
-      {/* Main Workspace: Parameters & Interactive Map */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Editor Card (5 Cols) */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-[#dce8da] shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-[#eef4ed] pb-3">
-            <h2 className="text-sm font-bold text-[#1a2e1a]">Parcel Parameters</h2>
-            <label className="text-xs text-[#2d7a3a] font-bold cursor-pointer flex items-center gap-1 hover:underline">
-              <Upload className="h-3.5 w-3.5" /> Upload .geojson
-              <input type="file" accept=".json,.geojson" onChange={handleFileUpload} className="hidden" />
-            </label>
+            {currentLocation && typeof currentLocation.latitude === "number" && (
+              <button
+                onClick={generateBoundaryForActiveLocation}
+                className="text-[11px] px-2 py-0.5 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-900 font-semibold hover:bg-emerald-100 transition"
+              >
+                Generate for Active Target
+              </button>
+            )}
           </div>
+        </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">Field / Parcel Name</label>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+          <div className="lg:col-span-8">
+            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Field Identifier / Parcel Name
+            </label>
             <input
               value={fieldName}
               onChange={(e) => setFieldName(e.target.value)}
-              className="w-full px-3 py-2 text-xs font-bold bg-[#fbfdfb] border border-[#d2e4d0] rounded-xl outline-none focus:border-[#2d7a3a]"
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-[#0d3b2e] focus:bg-white transition"
             />
           </div>
-
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">GeoJSON Polygon Coordinates</label>
-            <textarea
-              rows={9}
-              value={geoJsonText}
-              onChange={(e) => setGeoJsonText(e.target.value)}
-              className="w-full p-3 text-xs font-mono bg-[#f9fbf8] border border-[#d2e4d0] rounded-2xl outline-none focus:border-[#2d7a3a] text-gray-800"
-            />
+          <div className="lg:col-span-4 flex items-center gap-2">
+            <label className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md text-xs font-medium text-slate-700 cursor-pointer transition">
+              <Upload className="w-3.5 h-3.5 text-slate-500" />
+              <span>Upload GeoJSON File</span>
+              <input type="file" accept=".geojson,.json" onChange={handleFileUpload} className="hidden" />
+            </label>
           </div>
-
-          <div className="p-3 bg-[#eef7ec] rounded-2xl border border-[#c2ddbf] text-[11px] text-[#2d7a3a] flex gap-2">
-            <Info className="h-4 w-4 shrink-0 text-[#2d7a3a] mt-0.5" />
-            <span>
-              GeoJSON specification requires coordinates in <code>[longitude, latitude]</code> format with closed boundary ring.
-            </span>
-          </div>
-        </div>
-
-        {/* Map Visualization (7 Cols) */}
-        <div className="lg:col-span-7 space-y-4">
-          <FieldBoundaryMap
-            coordinates={activeCoordinates}
-            centroid={result ? result.boundary_metrics.centroid : undefined}
-            fieldName={fieldName}
-          />
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Results View */}
-      {result && (
-        <div className="space-y-6">
-          {/* Land Metrics Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="bg-white p-5 rounded-3xl border border-[#dce8da] shadow-xs">
-              <div className="text-[10px] text-gray-400 uppercase font-bold">Total Land Area</div>
-              <div className="text-2xl font-extrabold text-[#2d7a3a] mt-1">
-                {result.boundary_metrics.area_hectares} ha
-              </div>
-              <div className="text-[11px] text-gray-500 mt-0.5">({result.boundary_metrics.area_km2} km²)</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-3xl border border-[#dce8da] shadow-xs">
-              <div className="text-[10px] text-gray-400 uppercase font-bold">Boundary Perimeter</div>
-              <div className="text-2xl font-extrabold text-gray-800 mt-1">
-                {result.boundary_metrics.perimeter_km} km
-              </div>
-              <div className="text-[11px] text-gray-500 mt-0.5">
-                {result.boundary_metrics.vertex_count} boundary vertices
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-3xl border border-[#dce8da] shadow-xs">
-              <div className="text-[10px] text-gray-400 uppercase font-bold">Centroid Latitude</div>
-              <div className="text-2xl font-extrabold text-gray-800 font-mono mt-1">
-                {result.boundary_metrics.centroid.latitude.toFixed(4)}° N
-              </div>
-              <div className="text-[11px] text-gray-500 mt-0.5">Center of mass</div>
-            </div>
-
-            <div className="bg-white p-5 rounded-3xl border border-[#dce8da] shadow-xs">
-              <div className="text-[10px] text-gray-400 uppercase font-bold">Centroid Longitude</div>
-              <div className="text-2xl font-extrabold text-gray-800 font-mono mt-1">
-                {result.boundary_metrics.centroid.longitude.toFixed(4)}° E
-              </div>
-              <div className="text-[11px] text-gray-500 mt-0.5">WGS84 projection</div>
-            </div>
+      {/* ── Main Layout: Map (7 cols) + GeoJSON Editor / Results (5 cols) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Interactive Boundary Map */}
+        <div className="lg:col-span-7 space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-[#0d3b2e]" />
+              <span>Parcel Boundary Viewport (NASA GIBS Basemap)</span>
+            </h2>
+            <span className="text-[10px] text-slate-500 font-mono">
+              EPSG:4326 WGS-84 &bull; EPSG:3857 Display
+            </span>
           </div>
 
-          {/* Environmental Telemetry Snapshot for Centroid */}
-          <div className="bg-white p-6 rounded-3xl border border-[#dce8da] shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-[#eef4ed] pb-3">
-              <div>
-                <h3 className="text-base font-bold text-[#1a2e1a]">Environmental Telemetry for Centroid</h3>
-                <p className="text-xs text-[#4a6741]">NASA POWER Agroclimatology &amp; MERRA-2</p>
-              </div>
-              <span
-                className="px-3 py-1 rounded-full text-xs font-bold"
-                style={{
-                  backgroundColor: `${result.analysis.stress.color}20`,
-                  color: result.analysis.stress.color,
-                }}
-              >
-                {result.analysis.stress.level} Stress ({result.analysis.stress.score}/100)
-              </span>
-            </div>
-
-            {/* Findings */}
-            <div className="space-y-2">
-              <div className="text-xs font-bold text-gray-700">Parcel Agro-Climate Findings:</div>
-              {result.analysis.key_findings.map((f, i) => (
-                <div
-                  key={i}
-                  className="p-3 bg-[#f8faf7] rounded-xl text-xs text-gray-700 flex items-start gap-2 border border-[#eef4ed]"
-                >
-                  <span className="text-[#2d7a3a] font-bold mt-0.5">•</span>
-                  <span>{f}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Recommended Rotations */}
-            <div className="pt-2">
-              <div className="text-xs font-bold text-gray-700 mb-2">Suitable Rotational Crops for this Parcel:</div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {result.analysis.crop_recommendations.slice(0, 3).map((crop) => (
-                  <div key={crop.crop_id} className="p-3 rounded-2xl bg-gray-50 border border-gray-100">
-                    <div className="font-bold text-xs text-gray-800">{crop.name}</div>
-                    <div className="text-[#2d7a3a] font-extrabold text-sm mt-0.5">{crop.score} pts</div>
-                    <div className="text-[10px] text-gray-500 mt-1 line-clamp-1">{crop.benefits[0]}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <FieldBoundaryMap
+            coordinates={activeCoords}
+            fieldName={fieldName}
+            centroid={result ? result.boundary_metrics.centroid : undefined}
+          />
         </div>
-      )}
+
+        {/* Right: GeoJSON Editor & Calculated Metrics */}
+        <div className="lg:col-span-5 space-y-4">
+          {/* GeoJSON Polygon Editor */}
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                GeoJSON Polygon Definition
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono">WGS-84 [Lon, Lat]</span>
+            </div>
+
+            <textarea
+              rows={8}
+              value={geoJsonText}
+              onChange={(e) => setGeoJsonText(e.target.value)}
+              className="w-full p-2.5 text-xs font-mono bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-[#0d3b2e] focus:bg-white transition"
+              spellCheck={false}
+            />
+          </div>
+
+          {/* Results Summary */}
+          {result && (
+            <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Geodesic Metrics
+                  </h3>
+                  <div className="text-xs font-bold text-[#0d3b2e] mt-0.5">{result.field_name}</div>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Calculated
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Area</div>
+                  <div className="text-base font-bold font-mono text-slate-900 mt-0.5">
+                    {result.boundary_metrics.area_hectares.toFixed(1)} ha
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    {(result.boundary_metrics.area_hectares * 2.47105).toFixed(1)} acres
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Perimeter</div>
+                  <div className="text-base font-bold font-mono text-slate-900 mt-0.5">
+                    {result.boundary_metrics.perimeter_km.toFixed(2)} km
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    {(result.boundary_metrics.perimeter_km * 1000).toFixed(0)} meters
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Centroid Latitude</div>
+                  <div className="text-sm font-bold font-mono text-slate-900 mt-0.5">
+                    {result.boundary_metrics.centroid.latitude.toFixed(4)}°N
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 uppercase font-semibold">Centroid Longitude</div>
+                  <div className="text-sm font-bold font-mono text-slate-900 mt-0.5">
+                    {result.boundary_metrics.centroid.longitude.toFixed(4)}°E
+                  </div>
+                </div>
+              </div>
+
+              {/* Climate Overlay on Parcel Centroid */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Agroclimatic Telemetry at Centroid
+                </span>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="p-2 rounded bg-slate-50 border border-slate-200">
+                    <div className="text-[10px] text-slate-400">Stress Index</div>
+                    <div className="text-xs font-bold text-slate-900 font-mono mt-0.5">
+                      {result.analysis?.stress?.score ?? 0}/100
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-50 border border-slate-200">
+                    <div className="text-[10px] text-slate-400">Annual Precip</div>
+                    <div className="text-xs font-bold text-slate-900 font-mono mt-0.5">
+                      {result.analysis?.climate?.precipitation?.total_mm?.toFixed(0) ?? 0} mm
+                    </div>
+                  </div>
+                  <div className="p-2 rounded bg-slate-50 border border-slate-200">
+                    <div className="text-[10px] text-slate-400">Mean Temp</div>
+                    <div className="text-xs font-bold text-slate-900 font-mono mt-0.5">
+                      {result.analysis?.climate?.temperature?.mean?.toFixed(1) ?? 0}°C
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

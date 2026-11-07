@@ -64,24 +64,49 @@ def is_configured() -> bool:
     return bool(settings.OPENROUTER_API_KEY.strip())
 
 
-def _build_context_block(ctx: dict[str, Any]) -> str:
+def _build_context_block(
+    ctx: dict[str, Any] | None = None,
+    req_lat: float | None = None,
+    req_lon: float | None = None,
+    req_label: str | None = None,
+) -> str:
     """Render structured NASA field data as a plain-text context block."""
     lines = ["=== NASA AGROSCOPE FIELD DATA ==="]
 
-    loc = ctx.get("location", {})
-    if loc.get("label"):
-        lat_v = loc.get("latitude")
-        lon_v = loc.get("longitude")
-        if isinstance(lat_v, (int, float)) and isinstance(lon_v, (int, float)):
-            lat_dir = "N" if lat_v >= 0 else "S"
-            lon_dir = "E" if lon_v >= 0 else "W"
-            hemi = "Southern Hemisphere" if lat_v < 0 else "Northern Hemisphere"
-            lines.append(
-                f"Location : {loc['label']} "
-                f"({lat_v}°{lat_dir}, {lon_v}°{lon_dir} — {hemi})"
-            )
-        else:
-            lines.append(f"Location : {loc['label']} ({lat_v}N, {lon_v}E)")
+    target_lat = req_lat
+    target_lon = req_lon
+    target_label = req_label
+
+    if ctx:
+        loc = ctx.get("location", {})
+        if target_lat is None:
+            target_lat = loc.get("latitude")
+        if target_lon is None:
+            target_lon = loc.get("longitude")
+        if target_label is None:
+            target_label = loc.get("label")
+
+        # Double check coordinates match if both are specified
+        if req_lat is not None and loc.get("latitude") is not None:
+            if abs(req_lat - float(loc["latitude"])) > 0.1 or abs(req_lon - float(loc["longitude"])) > 0.1:
+                raise ValueError(
+                    f"Location mismatch in context block: requested ({req_lat}, {req_lon}) vs data ({loc.get('latitude')}, {loc.get('longitude')})"
+                )
+
+    if target_lat is not None and target_lon is not None:
+        lat_dir = "N" if target_lat >= 0 else "S"
+        lon_dir = "E" if target_lon >= 0 else "W"
+        hemi = "Southern Hemisphere" if target_lat < 0 else "Northern Hemisphere"
+        loc_str = target_label or f"{target_lat:.4f}, {target_lon:.4f}"
+        lines.append(f"Target Location : {loc_str} ({abs(target_lat):.4f}°{lat_dir}, {abs(target_lon):.4f}°{lon_dir} — {hemi})")
+    elif target_label:
+        lines.append(f"Target Location : {target_label}")
+
+    if not ctx:
+        lines.append("Telemetry Status: Telemetry pending initialization for this location.")
+        lines.append("Instruction: Do NOT fabricate satellite observations from another region.")
+        lines.append("=================================")
+        return "\n".join(lines)
 
     crop_target = ctx.get("crop") or ctx.get("selected_crop")
     if crop_target:
@@ -148,6 +173,10 @@ def _build_context_block(ctx: dict[str, Any]) -> str:
 async def openrouter_chat(
     question: str,
     advisor_context: dict[str, Any] | None = None,
+    *,
+    requested_latitude: float | None = None,
+    requested_longitude: float | None = None,
+    canonical_location_label: str | None = None,
 ) -> str:
     """
     Send a sanitised question to OpenRouter and return the reply text.
@@ -157,8 +186,14 @@ async def openrouter_chat(
     question : str
         User question (pre-validated and length-capped by the caller).
     advisor_context : dict | None
-        Structured field data from the advisor endpoint.  Grounds the
+        Structured field data from the advisor endpoint. Grounds the
         model in real NASA POWER observations.
+    requested_latitude : float | None
+        User's requested latitude.
+    requested_longitude : float | None
+        User's requested longitude.
+    canonical_location_label : str | None
+        User's requested location label.
 
     Raises
     ------
@@ -174,14 +209,20 @@ async def openrouter_chat(
         {"role": "system", "content": _SYSTEM_PROMPT}
     ]
 
-    if advisor_context:
-        messages.append({
-            "role": "system",
-            "content": (
-                "The following is real NASA field data for the user's location:\n\n"
-                + _build_context_block(advisor_context)
-            ),
-        })
+    context_block = _build_context_block(
+        ctx=advisor_context,
+        req_lat=requested_latitude,
+        req_lon=requested_longitude,
+        req_label=canonical_location_label,
+    )
+
+    messages.append({
+        "role": "system",
+        "content": (
+            "The following is active location context and verified NASA field data:\n\n"
+            + context_block
+        ),
+    })
 
     messages.append({"role": "user", "content": question})
 

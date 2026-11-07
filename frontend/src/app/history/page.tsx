@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { TrendingUp, MapPin, Loader2, AlertTriangle, Calendar } from "lucide-react";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { TrendingUp, Loader2, AlertTriangle, Compass } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useLocation } from "@/context/LocationContext";
-import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -48,15 +47,14 @@ function buildChartData(temp: MonthlyData, precip: MonthlyData) {
 
 export default function HistoryPage() {
   const { currentLocation } = useLocation();
-  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : ""));
-  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : ""));
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
   const [startYear, setStart] = useState("2010");
   const [endYear, setEnd] = useState("2024");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<HistoryResponse | null>(null);
 
-  // Sync with universal LocationContext
   useEffect(() => {
     if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
       setLat(String(currentLocation.latitude));
@@ -90,41 +88,49 @@ export default function HistoryPage() {
     }
   }, [lat, lon, startYear, endYear]);
 
+  useEffect(() => {
+    run();
+  }, [run]);
+
   const chartData =
     data?.temperature && data?.precipitation ? buildChartData(data.temperature, data.precipitation) : [];
 
   return (
-    <div className="min-h-screen bg-[#f8faf5]">
-      {/* Hero Header */}
-      <div className="bg-linear-to-b from-[#0c1b12] via-[#12281a] to-[#183624] text-white py-12 px-4 sm:px-6 lg:px-8 border-b border-[#234b32]">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
-                <TrendingUp className="h-5 w-5" />
-              </span>
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-300 bg-emerald-950/60 px-3 py-1 rounded-full border border-emerald-800/60">
-                Multi-Decade Climate Trend Analytics
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-emerald-200/80">
-              <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>NASA POWER &bull; MERRA-2 1981–Present Time Series</span>
-            </div>
+    <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
+      {/* ── Top Bar: Page Header ────────────────────────────────────── */}
+      <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-lg bg-[#0d3b2e] text-emerald-400">
+              <TrendingUp className="h-4 w-4" />
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              Historical Climate Trends
+            </h1>
+            <span className="text-[10px] font-semibold uppercase text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Multi-Decade Reanalysis
+            </span>
           </div>
-
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white mb-3">
-            Historical Climate Trends
-          </h1>
-          <p className="text-base text-emerald-100/90 max-w-3xl leading-relaxed">
+          <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
             Multi-decade monthly temperature and precipitation trajectories to evaluate long-term thermal drift, shifting growing seasons, and drying trends across global agricultural coordinates.
           </p>
+        </div>
 
-          {/* Quick Presets */}
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-emerald-300/80 mr-1 flex items-center gap-1">
-              <MapPin className="h-3.5 w-3.5" /> Reference Locations:
-            </span>
+        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium shrink-0">
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span>NASA POWER &bull; MERRA-2 1981–Present Time Series</span>
+        </div>
+      </div>
+
+      {/* ── Controls Console ────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <span className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+            <Compass className="w-3.5 h-3.5 text-[#0d3b2e]" />
+            <span>Target Coordinates &amp; Year Range</span>
+          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] uppercase font-bold text-slate-400 mr-1">Presets:</span>
             {DEMO_LOCATIONS.map((loc) => (
               <button
                 key={loc.label}
@@ -132,231 +138,163 @@ export default function HistoryPage() {
                   setLat(String(loc.lat));
                   setLon(String(loc.lon));
                 }}
-                className="text-xs px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 border border-white/15 text-emerald-100 font-medium transition"
+                className="text-[11px] px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition"
               >
-                {loc.label}
+                {loc.label.split(",")[0]}
               </button>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Universal Global Location Context Bar */}
-        <div className="mb-6">
-          <GlobalLocationBar />
-        </div>
-
-        {/* Controls Bar */}
-        <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs mb-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                Latitude (°N)
-              </label>
-              <input
-                value={lat}
-                onChange={(e) => setLat(e.target.value)}
-                placeholder="e.g. 38.34"
-                className="w-full px-3.5 py-2.5 text-sm bg-gray-50/50 border border-[#e2ece0] rounded-xl outline-none focus:ring-2 focus:ring-[#2d7a3a] focus:bg-white transition"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                Longitude (°E)
-              </label>
-              <input
-                value={lon}
-                onChange={(e) => setLon(e.target.value)}
-                placeholder="e.g. -98.12"
-                className="w-full px-3.5 py-2.5 text-sm bg-gray-50/50 border border-[#e2ece0] rounded-xl outline-none focus:ring-2 focus:ring-[#2d7a3a] focus:bg-white transition"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                Start Year (1981–)
-              </label>
-              <input
-                type="number"
-                value={startYear}
-                onChange={(e) => setStart(e.target.value)}
-                min="1981"
-                max="2024"
-                className="w-full px-3.5 py-2.5 text-sm bg-gray-50/50 border border-[#e2ece0] rounded-xl outline-none focus:ring-2 focus:ring-[#2d7a3a] focus:bg-white transition"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
-                End Year (&le; 2024)
-              </label>
-              <input
-                type="number"
-                value={endYear}
-                onChange={(e) => setEnd(e.target.value)}
-                min="1981"
-                max="2024"
-                className="w-full px-3.5 py-2.5 text-sm bg-gray-50/50 border border-[#e2ece0] rounded-xl outline-none focus:ring-2 focus:ring-[#2d7a3a] focus:bg-white transition"
-              />
-            </div>
-            <div>
-              <button
-                onClick={run}
-                disabled={loading}
-                className="w-full py-2.5 px-4 bg-[#2d7a3a] hover:bg-[#23602d] text-white font-semibold text-sm rounded-xl shadow-xs transition disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Querying Archive...</span>
-                  </>
-                ) : (
-                  <>
-                    <Calendar className="h-4 w-4" />
-                    <span>Load Climate History</span>
-                  </>
-                )}
-              </button>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Latitude (°N)
+            </label>
+            <input
+              value={lat}
+              onChange={(e) => setLat(e.target.value)}
+              placeholder="38.34"
+              className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-[#0d3b2e] focus:bg-white transition"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Longitude (°E)
+            </label>
+            <input
+              value={lon}
+              onChange={(e) => setLon(e.target.value)}
+              placeholder="-98.12"
+              className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-[#0d3b2e] focus:bg-white transition"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              Start Year (1981–)
+            </label>
+            <input
+              type="number"
+              value={startYear}
+              onChange={(e) => setStart(e.target.value)}
+              min="1981"
+              max="2024"
+              className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-[#0d3b2e] focus:bg-white transition"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">
+              End Year (&le; 2024)
+            </label>
+            <input
+              type="number"
+              value={endYear}
+              onChange={(e) => setEnd(e.target.value)}
+              min="1981"
+              max="2024"
+              className="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-md outline-none focus:border-[#0d3b2e] focus:bg-white transition"
+            />
+          </div>
+          <div>
+            <button
+              onClick={run}
+              disabled={loading}
+              className="w-full py-2 px-4 bg-[#0d3b2e] hover:bg-[#134e39] text-white font-semibold text-xs rounded-md shadow-2xs transition disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                  <span>Querying NASA...</span>
+                </>
+              ) : (
+                <>
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>Fetch History</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
-
-        {error && (
-          <div className="mb-6 flex gap-3 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 mt-0.5" />
-            <div>
-              <strong className="block font-bold">Historical Data Fetch Error</strong>
-              <span className="text-xs">{error}</span>
-            </div>
-          </div>
-        )}
-
-        {loading && (
-          <div className="bg-white rounded-2xl p-16 text-center border border-[#e2ece0] shadow-xs">
-            <Loader2 className="h-10 w-10 animate-spin text-[#2d7a3a] mx-auto mb-4" />
-            <h3 className="text-base font-bold text-[#1a2e1a]">
-              Ingesting Monthly NASA POWER Archives...
-            </h3>
-            <p className="text-xs text-[#4a6741] mt-1 max-w-md mx-auto">
-              Extracting multi-decadal monthly temperature (T2M) and precipitation (PRECTOTCORR) series from MERRA-2 reanalysis.
-            </p>
-          </div>
-        )}
-
-        {data && !loading && chartData.length > 0 && (
-          <div className="space-y-8">
-            {data.is_demo && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs font-semibold text-amber-800 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                <span>Demonstration Mode: NASA POWER API temporarily reached or using cached reference grid.</span>
-              </div>
-            )}
-
-            {/* Temperature Trend */}
-            {data.temperature && (
-              <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                  <div>
-                    <h3 className="text-base font-bold text-[#1a2e1a]">
-                      Monthly Mean Temperature (T2M)
-                    </h3>
-                    <p className="text-xs text-[#4a6741] mt-0.5">
-                      NASA MERRA-2 2-meter air temperature monthly climatology (°C)
-                    </p>
-                  </div>
-                  {data.temperature.trend?.significant && (
-                    <span
-                      className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                        data.temperature.trend.direction === "increasing"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                          : "bg-blue-50 text-blue-700 border-blue-200"
-                      }`}
-                    >
-                      {data.temperature.trend.direction === "increasing" ? "↑ Warming Trend Detected" : "↓ Cooling Trend"} (p={data.temperature.trend.p_value?.toFixed(3)})
-                    </span>
-                  )}
-                </div>
-
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 5, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f3ee" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} interval="preserveStartEnd" />
-                      <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} unit="°C" />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: "0.75rem",
-                          border: "1px solid #e2ece0",
-                          fontSize: "12px",
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="temp"
-                        stroke="#ea580c"
-                        strokeWidth={2}
-                        dot={false}
-                        name="Temperature (°C)"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {data.temperature.trend?.interpretation && (
-                  <p className="text-xs text-gray-600 mt-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                    <strong className="text-gray-800">OLS Regression Analysis:</strong> {data.temperature.trend.interpretation}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Precipitation Trend */}
-            {data.precipitation && (
-              <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                  <div>
-                    <h3 className="text-base font-bold text-[#1a2e1a]">
-                      Monthly Precipitation Accumulation
-                    </h3>
-                    <p className="text-xs text-[#4a6741] mt-0.5">
-                      NASA MERRA-2 bias-corrected total precipitation (mm)
-                    </p>
-                  </div>
-                  {data.precipitation.trend?.significant && (
-                    <span
-                      className={`text-xs font-bold px-3 py-1 rounded-full border ${
-                        data.precipitation.trend.direction === "decreasing"
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-blue-50 text-blue-700 border-blue-200"
-                      }`}
-                    >
-                      {data.precipitation.trend.direction === "decreasing" ? "↓ Drying Trend Detected" : "↑ Wetting Trend"} (p={data.precipitation.trend.p_value?.toFixed(3)})
-                    </span>
-                  )}
-                </div>
-
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} margin={{ top: 10, right: 10, bottom: 5, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f3ee" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#6b7280" }} interval="preserveStartEnd" />
-                      <YAxis tick={{ fontSize: 10, fill: "#6b7280" }} unit="mm" />
-                      <Tooltip
-                        contentStyle={{
-                          borderRadius: "0.75rem",
-                          border: "1px solid #e2ece0",
-                          fontSize: "12px",
-                        }}
-                      />
-                      <Bar dataKey="precip" fill="#2563eb" radius={[2, 2, 0, 0]} name="Precipitation (mm)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── Results Container ────────────────────────────────────────── */}
+      {data && (
+        <div className="space-y-5">
+          {/* Trend Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {data.temperature?.trend && (
+              <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Temperature Drift Analysis
+                </span>
+                <div className="text-sm font-bold text-slate-900">
+                  {data.temperature.trend.direction.toUpperCase()}:{" "}
+                  {data.temperature.trend.slope ? `${(data.temperature.trend.slope * 12).toFixed(2)} °C / decade` : "Negligible"}
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {data.temperature.trend.interpretation}
+                </p>
+              </div>
+            )}
+
+            {data.precipitation?.trend && (
+              <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Precipitation Regime Shift
+                </span>
+                <div className="text-sm font-bold text-slate-900">
+                  {data.precipitation.trend.direction.toUpperCase()}:{" "}
+                  {data.precipitation.trend.slope ? `${(data.precipitation.trend.slope * 12).toFixed(1)} mm / decade` : "Negligible"}
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  {data.precipitation.trend.interpretation}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Time Series Charts */}
+          {chartData.length > 0 && (
+            <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Monthly Temperature (°C) &amp; Precipitation (mm) History
+                </h3>
+                <span className="text-[10px] font-mono text-slate-500">
+                  {startYear} → {endYear} ({chartData.length} sample points)
+                </span>
+              </div>
+
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#64748b" }} minTickGap={40} />
+                    <YAxis tick={{ fontSize: 10, fill: "#64748b" }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#ffffff",
+                        borderColor: "#e2e8f0",
+                        borderRadius: "0.5rem",
+                        fontSize: "11px",
+                      }}
+                    />
+                    <Line type="monotone" dataKey="temp" name="Temperature (°C)" stroke="#d97706" strokeWidth={1.5} dot={false} />
+                    <Line type="monotone" dataKey="precip" name="Rainfall (mm)" stroke="#0284c7" strokeWidth={1.25} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

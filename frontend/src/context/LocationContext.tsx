@@ -21,6 +21,7 @@ export interface CanonicalLocation {
   startDate: string;
   endDate: string;
   source?: "search" | "coords" | "map" | "gps" | "preset" | "polygon";
+  revision?: number;
 }
 
 interface LocationContextType {
@@ -112,6 +113,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         ...updates,
         latitude: validLat,
         longitude: validLon,
+        revision: (prev.revision || 1) + 1,
       };
 
       try {

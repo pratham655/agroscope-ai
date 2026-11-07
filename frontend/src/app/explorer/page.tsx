@@ -8,27 +8,30 @@ import {
   Layers,
   MapPin,
   ArrowRight,
-  Sparkles,
   Satellite,
   Compass,
   Boxes,
   Map as MapIcon,
+  FlaskConical,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { type GlobeLocation } from "@/components/EarthGlobe3D";
 import { useLocation } from "@/context/LocationContext";
+import { SATELLITE_LAYERS, type GibsLayerKey } from "@/components/EarthExplorerMap";
 
-// Dynamically import 3D Globe (SSR false for Three.js WebGL canvas safety)
+// Dynamically import 3D Globe
 const EarthGlobe3D = dynamic(() => import("@/components/EarthGlobe3D"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[640px] rounded-3xl bg-[#07130b] animate-pulse flex flex-col items-center justify-center text-emerald-400/80 gap-3 border border-[#234b32]">
-      <Globe2 className="h-12 w-12 text-emerald-400 animate-spin" />
+    <div className="w-full h-[640px] rounded-xl bg-slate-900 flex flex-col items-center justify-center text-emerald-400 gap-3 border border-slate-700">
+      <Globe2 className="h-10 w-10 text-emerald-400 animate-spin" />
       <div className="text-sm font-bold text-white tracking-wide">
-        Initializing Cinematic 3D Earth Intelligence Engine...
+        Initializing 3D Planetary Earth Visualization...
       </div>
-      <div className="text-xs text-emerald-300/60 font-mono">
-        Loading WebGL Shaders &bull; Atmospheric Rayleigh Scattering Model
+      <div className="text-xs text-slate-400 font-mono">
+        Loading WebGL Rayleigh Atmospheric Shaders
       </div>
     </div>
   ),
@@ -38,38 +41,34 @@ const EarthGlobe3D = dynamic(() => import("@/components/EarthGlobe3D"), {
 const EarthExplorerMap = dynamic(() => import("@/components/EarthExplorerMap"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[640px] rounded-3xl bg-[#0f1f14] animate-pulse flex flex-col items-center justify-center text-white/60 gap-3 border border-[#d2e4d0]">
-      <Globe2 className="h-10 w-10 text-[#86efac] animate-spin" />
+    <div className="w-full h-[640px] rounded-xl bg-slate-900 flex flex-col items-center justify-center text-white/70 gap-3 border border-slate-700">
+      <Globe2 className="h-8 w-8 text-emerald-400 animate-spin" />
       <div className="text-sm font-bold text-white tracking-wide">
         Connecting to NASA Global Imagery Browse Services (GIBS)...
       </div>
-      <div className="text-xs text-white/50">Initializing EPSG:3857 Web Mercator Tile Matrix Level 9</div>
+      <div className="text-xs text-slate-400 font-mono">Streaming EPSG:3857 Web Mercator Tile Matrix</div>
     </div>
   ),
 });
 
-const GLOBAL_SITES = [
-  { name: "Kansas Winter Wheat Belt", country: "USA", lat: 38.34, lon: -98.12, crop: "Winter Wheat" },
-  { name: "Punjab Indo-Gangetic Basin", country: "India", lat: 30.73, lon: 76.78, crop: "Wheat / Rice" },
-  { name: "Chennai Agro-District", country: "India", lat: 13.0827, lon: 80.2707, crop: "Paddy / Groundnut" },
-  { name: "São Paulo State", country: "Brazil", lat: -23.5505, lon: -46.6333, crop: "Soybean / Sugarcane" },
-  { name: "Nairobi Highlands Basin", country: "Kenya", lat: -1.2921, lon: 36.8219, crop: "Maize / Coffee" },
-  { name: "Sydney / Murray Basin", country: "Australia", lat: -33.8688, lon: 151.2093, crop: "Barley / Cotton" },
-  { name: "Central Valley Agro-District", country: "USA", lat: 36.75, lon: -119.77, crop: "Fruit & Nuts" },
-  { name: "Nile River Irrigated Delta", country: "Egypt", lat: 31.11, lon: 30.94, crop: "Cotton / Wheat" },
+const GLOBAL_BENCHMARKS = [
+  { name: "Kansas Wheat Belt", country: "USA", lat: 38.34, lon: -98.12, crop: "Winter Wheat" },
+  { name: "Punjab Basin", country: "India", lat: 30.73, lon: 76.78, crop: "Wheat / Rice" },
+  { name: "São Paulo Cerrado", country: "Brazil", lat: -23.5505, lon: -46.6333, crop: "Soybean / Cane" },
+  { name: "Nairobi Highlands", country: "Kenya", lat: -1.2921, lon: 36.8219, crop: "Maize / Coffee" },
+  { name: "Sydney Basin", country: "Australia", lat: -33.8688, lon: 151.2093, crop: "Barley / Cotton" },
 ];
 
 export default function ExplorerPage() {
   const { currentLocation, openModal, setLocation } = useLocation();
-  // Default to 2D for immediate map-first satellite rendering
   const [viewMode, setViewMode] = useState<"2d" | "3d">("2d");
   const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lon: number }>(() => ({
     lat: currentLocation?.latitude ?? 30.73,
     lon: currentLocation?.longitude ?? 76.78,
   }));
   const [obsDate, setObsDate] = useState("2024-06-15");
+  const [activeLayerKey, setActiveLayerKey] = useState<GibsLayerKey>("modis_bands721");
 
-  // Allow ?mode=3d in URL query params
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -79,23 +78,13 @@ export default function ExplorerPage() {
     }
   }, []);
 
-  // Sync with universal LocationContext
   useEffect(() => {
     if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
       setSelectedCoords({ lat: currentLocation.latitude, lon: currentLocation.longitude });
     }
   }, [currentLocation]);
 
-  const handleSelectSite = (site: typeof GLOBAL_SITES[0]) => {
-    setSelectedCoords({ lat: site.lat, lon: site.lon });
-    setLocation({
-      latitude: site.lat,
-      longitude: site.lon,
-      label: `${site.name}, ${site.country}`,
-      crop: site.crop,
-      source: "preset",
-    });
-  };
+  const activeLayerMeta = SATELLITE_LAYERS.find((l) => l.key === activeLayerKey) || SATELLITE_LAYERS[1];
 
   const handleGlobeSelectSite = (site: GlobeLocation) => {
     setSelectedCoords({ lat: site.lat, lon: site.lon });
@@ -119,207 +108,267 @@ export default function ExplorerPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* 1 & 2 & 3 & 4: Compact Earth Explorer Heading, Location Control, Date, and 2D/3D View Selector */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#dce8da] shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        {/* Title & Badge */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#eef7ec] text-[#2d7a3a]">
-              <Satellite className="h-4 w-4" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-[#1a2e1a] tracking-tight">
-              Earth Explorer
-            </h1>
-            <span className="text-[10px] uppercase font-bold text-[#2d7a3a] bg-[#eef7ec] px-2.5 py-0.5 rounded-full border border-[#d2e4d0]">
-              NASA GIBS &bull; EPSG:3857 &bull; 250m
-            </span>
+    <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
+      {/* ── Top Bar: Compact Title, Active Location, Date & 2D/3D Mode ─── */}
+      <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[#0d3b2e] flex items-center justify-center text-emerald-400 shrink-0">
+            <Satellite className="w-4 h-4" />
           </div>
-          <p className="text-xs text-[#4a6741]">
-            Global satellite surveillance streaming daily calibrated NASA MODIS, VIIRS, and GPM planetary imagery.
-          </p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-bold text-slate-900">Earth Explorer Command Center</h1>
+              <span className="text-[10px] font-semibold uppercase text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                NASA GIBS WMTS
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              Planetary satellite surveillance streaming calibrated NASA MODIS, VIIRS, and GPM swaths.
+            </p>
+          </div>
         </div>
 
-        {/* Compact Right Controls: Active Location Chip + Date Selector + 2D/3D Switcher */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Active Global Location Pill */}
+        {/* Compact Right Controls */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Active Location Button */}
           <button
             onClick={openModal}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#f8faf7] hover:bg-[#eef7ec] border border-[#dce8da] text-xs font-semibold text-[#1a2e1a] transition cursor-pointer shadow-2xs"
-            title="Click to search global location or input custom coordinates"
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 transition cursor-pointer"
+            title="Click to search global location"
           >
-            <MapPin className="h-3.5 w-3.5 text-[#2d7a3a]" />
-            <span className="max-w-[180px] sm:max-w-[220px] truncate font-medium">
+            <MapPin className="w-3.5 h-3.5 text-[#0d3b2e]" />
+            <span className="max-w-[170px] truncate">
               {currentLocation?.label || `${selectedCoords.lat.toFixed(4)}°, ${selectedCoords.lon.toFixed(4)}°`}
             </span>
-            <span className="text-[10px] text-[#2d7a3a] font-bold underline ml-0.5">Change</span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              ({selectedCoords.lat.toFixed(2)}°, {selectedCoords.lon.toFixed(2)}°)
+            </span>
           </button>
 
           {/* Date Picker */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#f8faf7] border border-[#dce8da] text-xs">
-            <Calendar className="h-3.5 w-3.5 text-[#2d7a3a]" />
-            <span className="text-[10px] uppercase font-bold text-gray-400 mr-1">Date</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-xs">
+            <Calendar className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-[10px] uppercase font-bold text-slate-400">Date</span>
             <input
               type="date"
               value={obsDate}
               onChange={(e) => setObsDate(e.target.value)}
-              className="bg-transparent font-mono font-bold text-gray-800 outline-none text-xs"
+              className="bg-transparent font-mono font-semibold text-slate-800 outline-none text-xs"
             />
           </div>
 
-          {/* 2D / 3D View Selector */}
-          <div className="flex p-0.5 bg-[#f0f7ee] border border-[#d2e4d0] rounded-xl shadow-inner">
+          {/* 2D / 3D Toggle */}
+          <div className="flex p-0.5 bg-slate-100 border border-slate-200 rounded-md">
             <button
               onClick={() => setViewMode("2d")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
                 viewMode === "2d"
-                  ? "bg-[#2d7a3a] text-white shadow-xs"
-                  : "text-[#4a6741] hover:text-[#1a2e1a]"
+                  ? "bg-white text-[#0d3b2e] shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <MapIcon className="h-3.5 w-3.5" />
+              <MapIcon className="w-3.5 h-3.5" />
               <span>2D Satellite</span>
             </button>
             <button
               onClick={() => setViewMode("3d")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold transition ${
                 viewMode === "3d"
-                  ? "bg-[#2d7a3a] text-white shadow-xs"
-                  : "text-[#4a6741] hover:text-[#1a2e1a]"
+                  ? "bg-white text-[#0d3b2e] shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              <Boxes className="h-3.5 w-3.5" />
+              <Boxes className="w-3.5 h-3.5" />
               <span>3D Globe</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* 5. Central Interactive Visual Showcase: Large 2D Satellite Map or 3D Earth Globe */}
-      <div className="w-full">
-        {viewMode === "2d" ? (
-          <div className="space-y-2">
+      {/* ── Main Workspace: 70% Map + 30% Satellite Layer Side Panel ──── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Large Interactive Map (8 cols / ~68%) */}
+        <div className="lg:col-span-8 space-y-2">
+          {viewMode === "2d" ? (
             <EarthExplorerMap
               initialLat={selectedCoords.lat}
               initialLon={selectedCoords.lon}
               selectedDate={obsDate}
               onSelectCoords={handleMapSelectCoords}
+              selectedLayerKey={activeLayerKey}
+              onSelectLayer={setActiveLayerKey}
+              hideInternalLayerSelector={true}
             />
-          </div>
-        ) : (
-          <div className="space-y-2">
+          ) : (
             <EarthGlobe3D onSelectSite={handleGlobeSelectSite} />
+          )}
+        </div>
+
+        {/* Dedicated Scientific Side Panel (4 cols / ~32%) */}
+        <div className="lg:col-span-4 space-y-3">
+          {/* Layer Selector Card */}
+          <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#0d3b2e]" />
+                <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  NASA Observation Layers
+                </h2>
+              </div>
+              <span className="text-[10px] font-mono text-slate-500">8 Supported</span>
+            </div>
+
+            <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
+              {SATELLITE_LAYERS.map((layer) => {
+                const isSelected = layer.key === activeLayerKey;
+                return (
+                  <button
+                    key={layer.key}
+                    onClick={() => setActiveLayerKey(layer.key)}
+                    className={`w-full text-left p-2.5 rounded-lg border transition text-xs flex flex-col gap-0.5 cursor-pointer ${
+                      isSelected
+                        ? "border-[#0d3b2e] bg-slate-50 font-semibold text-slate-900 shadow-2xs"
+                        : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold">{layer.name}</span>
+                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-[#0d3b2e]" />}
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+                      <span>{layer.sensor}</span>
+                      <span>&bull;</span>
+                      <span>{layer.resolution}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Active Layer Dossier */}
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                <span>Active Instrument</span>
+                <span className="font-mono text-slate-500">{activeLayerMeta.sensor}</span>
+              </div>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                {activeLayerMeta.description}
+              </p>
+              <div className="text-[10px] text-slate-500 font-mono pt-1 border-t border-slate-200">
+                Tile Matrix: {activeLayerMeta.level} &bull; Native Zoom: {activeLayerMeta.maxNativeZoom}
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Preset Benchmark Quick Select */}
+          <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+              Preset Agro-Climatic Sites
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {GLOBAL_BENCHMARKS.map((b) => (
+                <button
+                  key={b.name}
+                  onClick={() => {
+                    setSelectedCoords({ lat: b.lat, lon: b.lon });
+                    setLocation({
+                      latitude: b.lat,
+                      longitude: b.lon,
+                      label: `${b.name}, ${b.country}`,
+                      crop: b.crop,
+                      source: "preset",
+                    });
+                  }}
+                  className={`p-2 rounded-md border text-left text-xs transition ${
+                    selectedCoords.lat === b.lat && selectedCoords.lon === b.lon
+                      ? "border-[#0d3b2e] bg-slate-50 font-semibold text-slate-900"
+                      : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <div className="font-semibold truncate">{b.name}</div>
+                  <div className="text-[10px] text-slate-500 truncate">{b.crop}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* 7 & 8: Contextual Analysis Panels & Supporting Feature Cards (Below the Map) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Spatial Target Card */}
-        <div className="bg-white rounded-2xl p-5 border border-[#dce8da] shadow-xs flex flex-col justify-between">
-          <div className="space-y-3">
+      {/* ── Below Map: Compact Shortcuts to Analytical Workspaces ─────── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-1">
+        {/* Field Analysis Shortcut */}
+        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Target Coordinate</span>
-              <span className="p-1.5 rounded-lg bg-[#eef7ec] text-[#2d7a3a]">
-                <MapPin className="h-4 w-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Biophysical Modeling
               </span>
+              <Compass className="w-4 h-4 text-[#0d3b2e]" />
             </div>
-            <div>
-              <div className="text-xl font-extrabold font-mono text-[#1a2e1a]">
-                {selectedCoords.lat.toFixed(4)}°, {selectedCoords.lon.toFixed(4)}°
-              </div>
-              <p className="text-xs text-[#4a6741] mt-0.5">
-                {selectedCoords.lat >= 0 ? `${selectedCoords.lat.toFixed(4)}° North` : `${Math.abs(selectedCoords.lat).toFixed(4)}° South`},{" "}
-                {selectedCoords.lon >= 0 ? `${selectedCoords.lon.toFixed(4)}° East` : `${Math.abs(selectedCoords.lon).toFixed(4)}° West`}
-              </p>
-            </div>
+            <h3 className="text-sm font-bold text-slate-900">Field Intelligence Engine</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Run multivariate agroclimatic reanalysis, SPI-3 drought calculations, and crop rotation scoring for these exact coordinates.
+            </p>
           </div>
-          <div className="pt-4">
+          <div className="pt-3 mt-2 border-t border-slate-100">
             <Link
               href={`/analyze?lat=${selectedCoords.lat}&lon=${selectedCoords.lon}&label=${encodeURIComponent(currentLocation?.label || "Observation Target")}&autorun=true`}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#2d7a3a] hover:bg-[#23602d] text-white font-bold text-xs rounded-xl shadow-xs transition"
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-[#0d3b2e] hover:bg-[#134e39] text-white font-semibold text-xs rounded-md shadow-2xs transition"
             >
-              <span>Run Deep Field Analysis</span>
-              <ArrowRight className="h-3.5 w-3.5" />
+              <span>Analyze Active Coordinates</span>
+              <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
             </Link>
           </div>
         </div>
 
-        {/* Farm Futures Lab Shortcut */}
-        <div className="bg-white rounded-2xl p-5 border border-[#dce8da] shadow-xs flex flex-col justify-between">
-          <div className="space-y-3">
+        {/* Farm Futures Shortcut */}
+        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Climate Stress Lab</span>
-              <span className="p-1.5 rounded-lg bg-blue-50 text-[#0b3d91]">
-                <Sparkles className="h-4 w-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Climate Perturbation
               </span>
+              <FlaskConical className="w-4 h-4 text-[#0d3b2e]" />
             </div>
-            <div>
-              <div className="text-base font-bold text-[#1a2e1a]">Farm Futures Simulation</div>
-              <p className="text-xs text-[#4a6741] mt-0.5 leading-relaxed">
-                Test hypothetical drought perturbations, temperature shocks, and irrigation adaptations at these coordinates.
-              </p>
-            </div>
+            <h3 className="text-sm font-bold text-slate-900">Farm Futures Lab</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Simulate rainfall deficits (-80% to +100%) and thermal forcing (-4°C to +6°C) against historical baselines.
+            </p>
           </div>
-          <div className="pt-4">
+          <div className="pt-3 mt-2 border-t border-slate-100">
             <Link
-              href={`/farm-futures?lat=${selectedCoords.lat}&lon=${selectedCoords.lon}`}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#f8faf7] hover:bg-[#eef7ec] text-[#2d7a3a] border border-[#dce8da] font-bold text-xs rounded-xl transition"
+              href="/farm-futures"
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold text-xs rounded-md transition"
             >
-              <span>Open Farm Futures Lab</span>
-              <ArrowRight className="h-3.5 w-3.5" />
+              <span>Launch Climate Lab</span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
             </Link>
           </div>
         </div>
 
         {/* Satellite Time Machine Shortcut */}
-        <div className="bg-white rounded-2xl p-5 border border-[#dce8da] shadow-xs flex flex-col justify-between">
-          <div className="space-y-3">
+        <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Multi-Year Chronology</span>
-              <span className="p-1.5 rounded-lg bg-purple-50 text-purple-700">
-                <Layers className="h-4 w-4" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Historical Archive
               </span>
+              <Clock className="w-4 h-4 text-[#0d3b2e]" />
             </div>
-            <div>
-              <div className="text-base font-bold text-[#1a2e1a]">Satellite Time Machine</div>
-              <p className="text-xs text-[#4a6741] mt-0.5 leading-relaxed">
-                Scrub across 2021–2024 historical observation archives with dual-epoch split comparison and seasonal time-lapses.
-              </p>
-            </div>
+            <h3 className="text-sm font-bold text-slate-900">Satellite Time Machine</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Step through multi-year orbital imagery and seasonal vegetation transitions across 2021–present archives.
+            </p>
           </div>
-          <div className="pt-4">
+          <div className="pt-3 mt-2 border-t border-slate-100">
             <Link
-              href={`/time-machine?lat=${selectedCoords.lat}&lon=${selectedCoords.lon}`}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#f8faf7] hover:bg-purple-50 text-purple-800 border border-purple-200 font-bold text-xs rounded-xl transition"
+              href="/time-machine"
+              className="w-full flex items-center justify-center gap-1.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold text-xs rounded-md transition"
             >
-              <span>Launch Satellite Time Machine</span>
-              <ArrowRight className="h-3.5 w-3.5" />
+              <span>Explore Historical Timeline</span>
+              <ArrowRight className="w-3.5 h-3.5 text-slate-600" />
             </Link>
           </div>
-        </div>
-      </div>
-
-      {/* Global Benchmark Basins Quick-Select Drawer (Subordinate, below the map & feature cards) */}
-      <div className="bg-white rounded-2xl p-4 border border-[#e2ece0] shadow-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-bold text-gray-500 mr-2 flex items-center gap-1.5">
-            <Compass className="h-3.5 w-3.5 text-[#2d7a3a]" /> Quick Preset Teleport:
-          </span>
-          {GLOBAL_SITES.map((site) => (
-            <button
-              key={site.name}
-              onClick={() => handleSelectSite(site)}
-              className={`text-xs px-3 py-1 rounded-xl font-medium transition border flex items-center gap-1.5 ${
-                Math.abs(selectedCoords.lat - site.lat) < 0.05 && Math.abs(selectedCoords.lon - site.lon) < 0.05
-                  ? "bg-[#2d7a3a] text-white border-[#2d7a3a] shadow-xs"
-                  : "bg-[#f8faf7] text-gray-700 border-[#dce8da] hover:bg-[#eef7ec] hover:text-[#2d7a3a]"
-              }`}
-            >
-              <span>{site.name}</span>
-              <span className="text-[10px] opacity-75 font-mono">({site.crop})</span>
-            </button>
-          ))}
         </div>
       </div>
     </div>

@@ -129,13 +129,13 @@ export default function SatelliteTimeMachineMap({
         zoomControl: true,
       });
 
-      // Base map underlay
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-        attribution: "© OpenStreetMap contributors, © CARTO",
-        subdomains: "abcd",
+      // Standard OpenStreetMap base underlay
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+        subdomains: ["a", "b", "c"],
         opacity: 0.35,
-        maxZoom: 18,
-        maxNativeZoom: 18,
+        maxZoom: 19,
+        maxNativeZoom: 19,
       }).addTo(map);
 
       const url = getGibsTileUrl(activeLayer, currentDate);

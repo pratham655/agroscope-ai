@@ -227,10 +227,16 @@ class TestCopilotStatusEndpoint:
 
 class TestCopilotChatEndpoint:
 
-    def _post(self, question: str, ctx=None):
+    def _post(self, question: str, ctx=None, lat=30.73, lon=76.78, label="Punjab, India"):
         return client.post(
             "/api/copilot/chat",
-            json={"question": question, "advisor_context": ctx},
+            json={
+                "question": question,
+                "requested_latitude": lat,
+                "requested_longitude": lon,
+                "canonical_location_label": label,
+                "advisor_context": ctx,
+            },
         )
 
     def test_invalid_question_too_short(self):
@@ -307,3 +313,59 @@ class TestCopilotChatEndpoint:
             ):
                 resp = self._post("What crop?", _SAMPLE_CTX)
         assert secret not in resp.text
+
+    def test_location_mismatch_blocks_punjab_for_mumbai(self):
+        """
+        REGRESSION TEST A & C:
+        When requested location is Mumbai (19.0760, 72.8777) but context is Punjab (30.73, 76.78),
+        the endpoint MUST reject the mismatch and refuse to generate a Punjab analysis.
+        """
+        resp = self._post(
+            question="What crop should I plant in Mumbai?",
+            ctx=_SAMPLE_CTX,  # Punjab context
+            lat=19.0760,
+            lon=72.8777,
+            label="Mumbai, Maharashtra",
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["mismatch_detected"] is True
+        assert data["location_match"] is False
+        assert data["ai_powered"] is False
+        assert data["requested_latitude"] == 19.0760
+        assert data["requested_longitude"] == 72.8777
+        assert "Mumbai" in data["reply"]
+        assert "Punjab" in data["reply"]
+        assert "cannot provide a location-specific analysis until the correct data is retrieved" in data["reply"]
+
+    def test_location_match_proceeds_normally(self):
+        """Matching coordinates proceed without triggering mismatch block."""
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+            resp = self._post(
+                question="What crop should I plant?",
+                ctx=_SAMPLE_CTX,  # Punjab context
+                lat=30.73,
+                lon=76.78,
+                label="Punjab, India",
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["mismatch_detected"] is False
+        assert data["location_match"] is True
+        assert data["requested_latitude"] == 30.73
+        assert data["requested_longitude"] == 76.78
+
+    def test_fallback_rules_engine_rejects_mismatch(self):
+        """Fallback engine must also reject mismatched telemetry."""
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+            resp = self._post(
+                question="Should I irrigate?",
+                ctx=_SAMPLE_CTX,  # Punjab
+                lat=19.0760,      # Mumbai
+                lon=72.8777,
+                label="Mumbai, Maharashtra",
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["mismatch_detected"] is True
+        assert "mismatch" in data["fallback_reason"].lower()

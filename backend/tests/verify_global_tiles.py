@@ -28,6 +28,7 @@ def get_image_info(data):
     return 'UNKNOWN', len(data), 0
 
 GLOBAL_LOCATIONS = [
+    ("Mumbai, India", 19.0760, 72.8777),
     ("Chennai, India", 13.0827, 80.2707),
     ("Punjab, India", 30.73, 76.78),
     ("São Paulo, Brazil", -23.5505, -46.6333),
@@ -37,12 +38,14 @@ GLOBAL_LOCATIONS = [
 ]
 
 LAYERS = [
-    ("Standard Topo (CARTO)", "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png", 6),
-    ("MODIS True Color", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", 6),
-    ("MODIS Bands 7-2-1", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_Bands721/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", 6),
-    ("MODIS NDVI 8-Day", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png", 6),
-    ("MODIS LST Day", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/default/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png", 6),
-    ("GPM IMERG Precip", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/IMERG_Precipitation_Rate_30min/default/default/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png", 6),
+    ("OpenStreetMap Standard", "https://tile.openstreetmap.org/{z}/{x}/{y}.png", 6),
+    ("MODIS True Color", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/2024-06-15/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", 6),
+    ("MODIS Bands 7-2-1", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_Bands721/default/2024-06-15/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", 6),
+    ("MODIS Aqua True Color", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Aqua_CorrectedReflectance_TrueColor/default/2024-06-15/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", 6),
+    ("VIIRS NOAA-20 True Color", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/2024-06-15/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", 6),
+    ("MODIS NDVI Monthly", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_L3_NDVI_Monthly/default/2024-06-01/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png", 6),
+    ("MODIS LST Day", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_Land_Surface_Temp_Day/default/2024-06-15/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png", 6),
+    ("GPM IMERG Precip", "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/IMERG_Precipitation_Rate_30min/default/2024-06-15/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png", 6),
 ]
 
 print("=================================================================")

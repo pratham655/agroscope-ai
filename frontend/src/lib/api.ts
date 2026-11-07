@@ -367,11 +367,30 @@ export async function analyzeField(params: FieldAnalysisParams): Promise<FieldRe
   }
 }
 
+export interface CopilotChatPayload {
+  question: string;
+  requested_latitude: number;
+  requested_longitude: number;
+  canonical_location_label?: string;
+  location_revision?: number;
+  data_latitude?: number;
+  data_longitude?: number;
+  data_retrieval_timestamp?: string;
+  advisor_context?: Record<string, unknown> | null;
+}
+
 export interface CopilotChatResponse {
   reply: string;
   model?: string | null;
   ai_powered: boolean;
   fallback_reason?: string | null;
+  mismatch_detected?: boolean;
+  requested_latitude: number;
+  requested_longitude: number;
+  canonical_location_label?: string | null;
+  data_latitude?: number | null;
+  data_longitude?: number | null;
+  location_match: boolean;
   disclaimer: string;
 }
 
@@ -382,17 +401,38 @@ export interface CopilotStatusResponse {
 }
 
 export async function askCopilot(
-  question: string,
+  param: string | CopilotChatPayload,
   advisorContext?: Record<string, unknown> | null
 ): Promise<CopilotChatResponse> {
   const url = `${BASE}/api/copilot/chat`;
+
+  let body: Record<string, unknown>;
+  if (typeof param === "object") {
+    body = {
+      question: param.question,
+      requested_latitude: param.requested_latitude,
+      requested_longitude: param.requested_longitude,
+      canonical_location_label: param.canonical_location_label || undefined,
+      location_revision: param.location_revision || undefined,
+      data_latitude: param.data_latitude || undefined,
+      data_longitude: param.data_longitude || undefined,
+      data_retrieval_timestamp: param.data_retrieval_timestamp || undefined,
+      advisor_context: param.advisor_context || null,
+    };
+  } else {
+    body = {
+      question: param,
+      requested_latitude: 30.73,
+      requested_longitude: 76.78,
+      canonical_location_label: "Punjab, India",
+      advisor_context: advisorContext || null,
+    };
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      question,
-      advisor_context: advisorContext || null,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));

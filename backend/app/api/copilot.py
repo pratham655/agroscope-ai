@@ -43,6 +43,13 @@ _FALLBACK_HEADER = (
 # ---------------------------------------------------------------------------
 class CopilotChatRequest(BaseModel):
     question: str = Field(..., min_length=3, max_length=_MAX_Q_LEN)
+    requested_latitude: float = Field(..., ge=-90.0, le=90.0)
+    requested_longitude: float = Field(..., ge=-180.0, le=180.0)
+    canonical_location_label: Optional[str] = Field(None, max_length=200)
+    location_revision: Optional[int] = Field(None, description="Client-side location revision sequence")
+    data_latitude: Optional[float] = Field(None, ge=-90.0, le=90.0)
+    data_longitude: Optional[float] = Field(None, ge=-180.0, le=180.0)
+    data_retrieval_timestamp: Optional[str] = Field(None, max_length=50)
     advisor_context: Optional[dict[str, Any]] = Field(
         None,
         description="Structured field data from GET /api/advisor/recommendations",
@@ -62,6 +69,13 @@ class CopilotChatResponse(BaseModel):
     model: Optional[str] = None
     ai_powered: bool
     fallback_reason: Optional[str] = None
+    mismatch_detected: bool = False
+    requested_latitude: float
+    requested_longitude: float
+    canonical_location_label: Optional[str] = None
+    data_latitude: Optional[float] = None
+    data_longitude: Optional[float] = None
+    location_match: bool = True
     disclaimer: str = (
         "AI-generated recommendation grounded in NASA POWER / MERRA-2 data "
         "where provided. Always verify with local agronomic expertise."
@@ -91,40 +105,109 @@ async def copilot_status():
 @router.post("/chat", response_model=CopilotChatResponse)
 async def copilot_chat(body: CopilotChatRequest = Body(...)):
     """
-    Farmer Action Copilot.
+    Farmer Action Copilot with Strict Location-Consistency Verification.
 
-    When OPENROUTER_API_KEY is set:
-      Sends sanitised question + NASA field context to OpenRouter and
-      returns a grounded, explainable response.
-
-    When the key is missing or the API is unavailable:
-      Returns a structured rule-based fallback grounded in available
-      NASA POWER observations.
-
-    The API key is never included in any response payload.
+    Validates that any attached environmental telemetry strictly matches the
+    user's requested coordinates (within 0.1° / ~11 km bounding tolerance).
+    If a location mismatch is detected (e.g. user requested Mumbai but received
+    stale Punjab telemetry), the analysis is blocked immediately.
     """
     logger.info(
-        "Copilot request | ai=%s | q_len=%d | ctx=%s",
-        is_configured(), len(body.question), body.advisor_context is not None,
+        "Copilot request | req=(%s, %s, %s) | q_len=%d | ctx=%s",
+        body.requested_latitude, body.requested_longitude,
+        body.canonical_location_label, len(body.question),
+        body.advisor_context is not None,
     )
 
+    # 1. Coordinate Extraction & Mismatch Validation
+    data_lat = body.data_latitude
+    data_lon = body.data_longitude
+    ctx_label = None
+
+    if body.advisor_context and isinstance(body.advisor_context.get("location"), dict):
+        ctx_loc = body.advisor_context["location"]
+        ctx_label = ctx_loc.get("label")
+        if data_lat is None and "latitude" in ctx_loc:
+            try:
+                data_lat = float(ctx_loc["latitude"])
+            except (TypeError, ValueError):
+                pass
+        if data_lon is None and "longitude" in ctx_loc:
+            try:
+                data_lon = float(ctx_loc["longitude"])
+            except (TypeError, ValueError):
+                pass
+
+    COORD_TOLERANCE = 0.1  # ~11 km bounding box
+
+    if data_lat is not None and data_lon is not None:
+        lat_diff = abs(body.requested_latitude - data_lat)
+        lon_diff = abs(body.requested_longitude - data_lon)
+        if lat_diff > COORD_TOLERANCE or lon_diff > COORD_TOLERANCE:
+            req_name = body.canonical_location_label or f"{body.requested_latitude:.4f}, {body.requested_longitude:.4f}"
+            ctx_name = ctx_label or f"{data_lat:.4f}, {data_lon:.4f}"
+            mismatch_reply = (
+                f"Your selected location is {req_name} ({body.requested_latitude:.4f}, {body.requested_longitude:.4f}), "
+                f"but the available environmental dataset belongs to {ctx_name} ({data_lat:.4f}, {data_lon:.4f}). "
+                f"I cannot provide a location-specific analysis until the correct data is retrieved."
+            )
+            logger.warning(
+                "Copilot location mismatch BLOCKED: requested=(%s, %s) vs data=(%s, %s)",
+                body.requested_latitude, body.requested_longitude, data_lat, data_lon,
+            )
+            return CopilotChatResponse(
+                reply=mismatch_reply,
+                model="Location Integrity Engine",
+                ai_powered=False,
+                fallback_reason="Location-context mismatch detected. Stale or cross-location telemetry blocked.",
+                mismatch_detected=True,
+                requested_latitude=body.requested_latitude,
+                requested_longitude=body.requested_longitude,
+                canonical_location_label=body.canonical_location_label,
+                data_latitude=data_lat,
+                data_longitude=data_lon,
+                location_match=False,
+            )
+
+    # 2. Forward to OpenRouter AI or Rule-Based Fallback
     try:
         reply = await openrouter_chat(
             question=body.question,
             advisor_context=body.advisor_context,
+            requested_latitude=body.requested_latitude,
+            requested_longitude=body.requested_longitude,
+            canonical_location_label=body.canonical_location_label,
         )
         return CopilotChatResponse(
             reply=reply,
             model=settings.OPENROUTER_MODEL,
             ai_powered=True,
+            requested_latitude=body.requested_latitude,
+            requested_longitude=body.requested_longitude,
+            canonical_location_label=body.canonical_location_label,
+            data_latitude=data_lat,
+            data_longitude=data_lon,
+            location_match=True,
         )
 
     except OpenRouterKeyMissingError:
         logger.info("Key not configured — returning rule-based fallback.")
         return CopilotChatResponse(
-            reply=_rule_based_fallback(body.question, body.advisor_context),
+            reply=_rule_based_fallback(
+                question=body.question,
+                ctx=body.advisor_context,
+                req_lat=body.requested_latitude,
+                req_lon=body.requested_longitude,
+                req_label=body.canonical_location_label,
+            ),
             ai_powered=False,
             fallback_reason="OPENROUTER_API_KEY not configured.",
+            requested_latitude=body.requested_latitude,
+            requested_longitude=body.requested_longitude,
+            canonical_location_label=body.canonical_location_label,
+            data_latitude=data_lat,
+            data_longitude=data_lon,
+            location_match=True,
         )
 
     except OpenRouterUnavailableError as exc:
@@ -139,6 +222,12 @@ async def copilot_chat(body: CopilotChatRequest = Body(...)):
             ),
             ai_powered=False,
             fallback_reason=safe_msg,
+            requested_latitude=body.requested_latitude,
+            requested_longitude=body.requested_longitude,
+            canonical_location_label=body.canonical_location_label,
+            data_latitude=data_lat,
+            data_longitude=data_lon,
+            location_match=True,
         )
 
     except Exception as exc:
@@ -158,21 +247,36 @@ def _safe_str(exc: Exception) -> str:
     return msg
 
 
-def _rule_based_fallback(question: str, ctx: Optional[dict]) -> str:
+def _rule_based_fallback(
+    question: str,
+    ctx: Optional[dict],
+    req_lat: float,
+    req_lon: float,
+    req_label: Optional[str] = None,
+) -> str:
     """
     Generate a structured text reply from NASA field data when AI is off.
     Returns Markdown-formatted text suitable for the chat panel.
+    Strictly verifies location matches requested coordinates.
     """
     q = question.lower()
-    env = (ctx or {}).get("environmental_context", {})
-    loc = (ctx or {}).get("location", {})
-    crops = (ctx or {}).get("crop_rotation_ranking", [])
-    evidence = (ctx or {}).get("evidence_summary", [])
-
+    target_name = req_label or f"{req_lat:.4f}, {req_lon:.4f}"
     lines: list[str] = [_FALLBACK_HEADER]
 
-    if loc.get("label"):
-        lines.append(f"**Location:** {loc['label']}\n")
+    if not ctx or not ctx.get("environmental_context"):
+        lines.append(f"**Location:** {target_name} ({req_lat:.4f}, {req_lon:.4f})\n")
+        lines.append(
+            f"⚠️ **Telemetry Notice:** No verified NASA POWER environmental observations are currently loaded for {target_name}.\n\n"
+            "Please select and initialize your field location to retrieve real-time satellite and agroclimatological indicators."
+        )
+        return "\n".join(lines)
+
+    env = ctx.get("environmental_context", {})
+    loc = ctx.get("location", {})
+    crops = ctx.get("crop_rotation_ranking", [])
+    evidence = ctx.get("evidence_summary", [])
+
+    lines.append(f"**Location:** {loc.get('label', target_name)} ({req_lat:.4f}, {req_lon:.4f})\n")
 
     # Data context
     data_rows = []
