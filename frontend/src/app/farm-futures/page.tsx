@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   FlaskConical,
   Play,
@@ -63,6 +63,15 @@ export default function FarmFuturesPage() {
   const [locationLabel, setLocationLabel] = useState(() => (currentLocation ? currentLocation.label : "Kansas Wheat Belt, USA"));
   const [startDate, setStartDate] = useState("2023-01-01");
   const [endDate, setEndDate] = useState("2023-12-31");
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+      if (currentLocation.label) setLocationLabel(currentLocation.label);
+    }
+  }, [currentLocation]);
 
   // Geocoding search state
   const [searchQuery, setSearchQuery] = useState("");

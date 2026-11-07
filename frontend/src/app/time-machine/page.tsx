@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
   Clock,
@@ -12,6 +12,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 // Dynamic import for Leaflet-based Time Machine Map
 const SatelliteTimeMachineMap = dynamic(() => import("@/components/SatelliteTimeMachineMap"), {
@@ -38,9 +40,18 @@ const PRESET_BREADBASKETS = [
 ];
 
 export default function TimeMachinePage() {
-  const [lat, setLat] = useState("38.34");
-  const [lon, setLon] = useState("-98.12");
+  const { currentLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
   const [currentObsDate, setCurrentObsDate] = useState("2024-07-15");
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+    }
+  }, [currentLocation]);
 
   const handleSelectPreset = (b: typeof PRESET_BREADBASKETS[0]) => {
     setLat(String(b.lat));
@@ -102,6 +113,9 @@ export default function TimeMachinePage() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Universal Global Location Context Bar */}
+        <GlobalLocationBar />
+
         {/* Coordinate Input Bar */}
         <div className="bg-white rounded-2xl p-5 border border-[#e2ece0] shadow-xs">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">

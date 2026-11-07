@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   FileText,
   MapPin,
@@ -15,6 +15,8 @@ import {
   Info,
 } from "lucide-react";
 import { analyzeField, type FieldReport } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 const DEMO_LOCATIONS = [
   { label: "Kansas Wheat Belt, USA", lat: 38.34, lon: -98.12, crop: "Winter Wheat" },
@@ -25,14 +27,24 @@ const DEMO_LOCATIONS = [
 ];
 
 export default function ReportsPage() {
-  const [lat, setLat] = useState("38.34");
-  const [lon, setLon] = useState("-98.12");
-  const [label, setLabel] = useState("Kansas Wheat Belt (Benchmark Field 4B)");
+  const { currentLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
+  const [label, setLabel] = useState(() => (currentLocation ? currentLocation.label : "Kansas Wheat Belt (Benchmark Field 4B)"));
   const [loading, setLoading] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<FieldReport | null>(null);
   const [reportMd, setReportMd] = useState<string | null>(null);
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+      if (currentLocation.label) setLabel(currentLocation.label);
+    }
+  }, [currentLocation]);
 
   const printableRef = useRef<HTMLDivElement>(null);
 
@@ -191,6 +203,9 @@ export default function ReportsPage() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Universal Global Location Context Bar */}
+        <GlobalLocationBar />
+
         {/* Input Parameters Bar */}
         <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

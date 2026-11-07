@@ -20,6 +20,8 @@ import {
   type AdvisorResponse,
   type CopilotStatusResponse,
 } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 const DEMO_LOCATIONS = [
   { label: "Kansas Wheat Belt, USA", lat: 38.34, lon: -98.12, region: "North America" },
@@ -48,14 +50,24 @@ interface ChatMessage {
 }
 
 export default function AdvisorPage() {
-  const [lat, setLat] = useState("38.34");
-  const [lon, setLon] = useState("-98.12");
-  const [label, setLabel] = useState("Kansas Wheat Belt, USA");
+  const { currentLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
+  const [label, setLabel] = useState(() => (currentLocation ? currentLocation.label : "Kansas Wheat Belt, USA"));
   const [loading, setLoading] = useState(false);
   const [copilotLoading, setCopilotLoading] = useState(false);
   const [copilotStatus, setCopilotStatus] = useState<CopilotStatusResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AdvisorResponse | null>(null);
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+      if (currentLocation.label) setLabel(currentLocation.label);
+    }
+  }, [currentLocation]);
 
   // Copilot Chat State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -169,6 +181,8 @@ export default function AdvisorPage() {
           disclaimer: res.disclaimer,
           evidenceBasis: data
             ? `NASA POWER (${data.location.latitude.toFixed(2)}°N, ${data.location.longitude.toFixed(2)}°E)`
+            : currentLocation
+            ? `NASA POWER (${currentLocation.latitude.toFixed(2)}°N, ${currentLocation.longitude.toFixed(2)}°E)`
             : "No field initialized yet",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
@@ -256,6 +270,9 @@ export default function AdvisorPage() {
           ))}
         </div>
       </div>
+
+      {/* Universal Global Location Context Bar */}
+      <GlobalLocationBar />
 
       {/* Spatial Controls */}
       <div className="bg-white rounded-3xl p-6 border border-[#dce8da] shadow-xs space-y-4">

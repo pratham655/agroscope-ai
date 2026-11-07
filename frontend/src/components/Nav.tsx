@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Leaf, Menu, X, ChevronDown, Compass, FlaskConical, Droplets, MapPin, BarChart3, ScanEye, Clock } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "@/context/LocationContext";
 
 interface NavItem {
   href: string;
@@ -37,6 +38,7 @@ const secondaryLinks: NavItem[] = [
 
 export default function Nav() {
   const pathname = usePathname();
+  const { currentLocation, openModal } = useLocation();
   const [open, setOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
 
@@ -127,8 +129,19 @@ export default function Nav() {
           ))}
         </div>
 
-        {/* NASA badge */}
+        {/* Location & NASA badge */}
         <div className="hidden md:flex items-center gap-2">
+          {currentLocation && (
+            <button
+              onClick={openModal}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0f7ee] hover:bg-[#e2ece0] text-xs font-semibold text-[#2d7a3a] border border-[#d2e4d0] transition cursor-pointer max-w-[200px]"
+              title="Click to change active global location"
+            >
+              <MapPin className="h-3.5 w-3.5 text-[#2d7a3a] shrink-0" />
+              <span className="truncate">{currentLocation.label}</span>
+            </button>
+          )}
+
           <div className="text-xs text-[#2d7a3a] font-semibold bg-[#eef7ec] px-3 py-1 rounded-full border border-[#c5dfc2] flex items-center gap-1.5 shadow-2xs">
             <span>🛰️</span>
             <span>NASA Space Apps 2026</span>

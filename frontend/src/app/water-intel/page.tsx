@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getWaterIntelligence, type WaterIntelligenceResult } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 import {
   ResponsiveContainer,
   LineChart,
@@ -37,14 +39,23 @@ const DEMO_LOCATIONS = [
 ];
 
 export default function WaterIntelPage() {
-  const [lat, setLat] = useState("38.34");
-  const [lon, setLon] = useState("-98.12");
+  const { currentLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
   const [startDate, setStartDate] = useState("2023-01-01");
   const [endDate, setEndDate] = useState("2023-12-31");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<WaterIntelligenceResult | null>(null);
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+    }
+  }, [currentLocation]);
 
   const fetchData = useCallback(async () => {
     const latN = parseFloat(lat);
@@ -73,9 +84,11 @@ export default function WaterIntelPage() {
 
   useEffect(() => {
     let active = true;
+    const initialLat = currentLocation?.latitude ?? 38.34;
+    const initialLon = currentLocation?.longitude ?? -98.12;
     getWaterIntelligence({
-      latitude: 38.34,
-      longitude: -98.12,
+      latitude: initialLat,
+      longitude: initialLon,
       startDate: "2023-01-01",
       endDate: "2023-12-31",
     })
@@ -88,7 +101,7 @@ export default function WaterIntelPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentLocation]);
 
   // Prepare chart series data
   const chartData = (result?.dates || []).map((d, i) => ({
@@ -153,6 +166,11 @@ export default function WaterIntelPage() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Universal Global Location Context Bar */}
+        <div className="mb-6">
+          <GlobalLocationBar />
+        </div>
+
         {/* Controls Bar */}
         <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs mb-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">

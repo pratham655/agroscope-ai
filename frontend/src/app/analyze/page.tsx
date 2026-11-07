@@ -57,11 +57,9 @@ export default function AnalyzePage() {
       const urlLabel = sp.get("label");
       const autorun = sp.get("autorun");
       if (urlLat && urlLon) {
-        /* eslint-disable react-hooks/set-state-in-effect */
         setLat(urlLat);
         setLon(urlLon);
         if (urlLabel) setLabel(urlLabel);
-        /* eslint-enable react-hooks/set-state-in-effect */
         if (autorun === "true") {
           const latN = parseFloat(urlLat);
           const lonN = parseFloat(urlLon);
@@ -87,11 +85,9 @@ export default function AnalyzePage() {
     }
 
     if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
-      /* eslint-disable react-hooks/set-state-in-effect */
       setLat(String(currentLocation.latitude));
       setLon(String(currentLocation.longitude));
       setLabel(currentLocation.label || `${currentLocation.latitude.toFixed(4)}, ${currentLocation.longitude.toFixed(4)}`);
-      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [currentLocation, startDate, endDate]);
 

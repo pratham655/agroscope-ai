@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
   Globe2,
@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type GlobeLocation } from "@/components/EarthGlobe3D";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 // Dynamically import 3D Globe (SSR false for Three.js WebGL canvas safety)
 const EarthGlobe3D = dynamic(() => import("@/components/EarthGlobe3D"), {
@@ -58,12 +60,20 @@ const GLOBAL_SITES = [
 ];
 
 export default function ExplorerPage() {
+  const { currentLocation } = useLocation();
   const [viewMode, setViewMode] = useState<"3d" | "2d">("3d");
-  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lon: number }>({
-    lat: 38.34,
-    lon: -98.12,
-  });
+  const [selectedCoords, setSelectedCoords] = useState<{ lat: number; lon: number }>(() => ({
+    lat: currentLocation?.latitude ?? 38.34,
+    lon: currentLocation?.longitude ?? -98.12,
+  }));
   const [obsDate, setObsDate] = useState("2024-06-15");
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setSelectedCoords({ lat: currentLocation.latitude, lon: currentLocation.longitude });
+    }
+  }, [currentLocation]);
 
   const handleSelectSite = (site: typeof GLOBAL_SITES[0]) => {
     setSelectedCoords({ lat: site.lat, lon: site.lon });
@@ -159,6 +169,9 @@ export default function ExplorerPage() {
           ))}
         </div>
       </div>
+
+      {/* Universal Global Location Context Bar */}
+      <GlobalLocationBar />
 
       {/* Main Visualization Canvas: Toggle between 3D Globe and 2D GIBS Map */}
       {viewMode === "3d" ? (

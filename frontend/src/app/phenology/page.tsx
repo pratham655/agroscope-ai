@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getPhenology, type PhenologyResult } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 import {
   ResponsiveContainer,
   LineChart,
@@ -36,13 +38,22 @@ const DEMO_LOCATIONS = [
 const YEAR_COLORS = ["#94a3b8", "#38bdf8", "#818cf8", "#f59e0b", "#10b981"];
 
 export default function PhenologyPage() {
-  const [lat, setLat] = useState("38.34");
-  const [lon, setLon] = useState("-98.12");
+  const { currentLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
   const [years, setYears] = useState("2021,2022,2023,2024");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PhenologyResult | null>(null);
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+    }
+  }, [currentLocation]);
 
   const fetchPhenology = useCallback(async () => {
     const latN = parseFloat(lat);
@@ -70,9 +81,11 @@ export default function PhenologyPage() {
 
   useEffect(() => {
     let active = true;
+    const initialLat = currentLocation?.latitude ?? 38.34;
+    const initialLon = currentLocation?.longitude ?? -98.12;
     getPhenology({
-      latitude: 38.34,
-      longitude: -98.12,
+      latitude: initialLat,
+      longitude: initialLon,
       years: "2021,2022,2023,2024",
     })
       .then((data) => {
@@ -84,7 +97,7 @@ export default function PhenologyPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [currentLocation]);
 
   // Combine DOY curves for recharts (DOY 1..365)
   const combinedCurves: Record<string, number | null>[] = [];
@@ -164,6 +177,20 @@ export default function PhenologyPage() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Universal Global Location Context Bar */}
+        <div className="mb-6">
+          <GlobalLocationBar />
+        </div>
+
+        {parseFloat(lat) < 0 && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-center gap-3 text-xs text-blue-800">
+            <Info className="h-4 w-4 shrink-0 text-blue-600" />
+            <span>
+              <strong>Southern Hemisphere Detected ({parseFloat(lat).toFixed(2)}°S):</strong> Growing seasons run inverted relative to the Northern Hemisphere calendar. Peak summer vegetative biomass typically occurs around Day of Year (DOY) 330–60 (December–February), while winter dormancy falls around DOY 150–240 (June–August).
+            </span>
+          </div>
+        )}
+
         {/* Controls Bar */}
         <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs mb-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">

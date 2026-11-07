@@ -79,7 +79,6 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           parsed.longitude >= -180 &&
           parsed.longitude <= 180
         ) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect
           setCurrentLocationState((prev) => ({ ...prev, ...parsed }));
         }
       }

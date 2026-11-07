@@ -4,6 +4,8 @@ import { useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { MapPin, Upload, AlertTriangle, Info, Globe2, Compass, Layers } from "lucide-react";
 import { analyzeFieldBoundary, type BoundaryAnalysisResult } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 const FieldBoundaryMap = dynamic(() => import("@/components/FieldBoundaryMap"), {
   ssr: false,
@@ -61,6 +63,7 @@ const PRESET_POLYGONS = [
 ];
 
 export default function FieldBoundaryPage() {
+  const { currentLocation } = useLocation();
   const [fieldName, setFieldName] = useState("Kansas Wheat Field #4 (180 ha)");
   const [geoJsonText, setGeoJsonText] = useState(
     JSON.stringify(
@@ -76,6 +79,33 @@ export default function FieldBoundaryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BoundaryAnalysisResult | null>(null);
+
+  const generateBoundaryForActiveLocation = useCallback(() => {
+    if (!currentLocation || typeof currentLocation.latitude !== "number" || typeof currentLocation.longitude !== "number") return;
+    const clat = currentLocation.latitude;
+    const clon = currentLocation.longitude;
+    // ~1 km square parcel around centroid
+    const dlat = 0.009;
+    const dlon = 0.009 / Math.max(0.1, Math.cos((clat * Math.PI) / 180));
+    const coords = [
+      [Number((clon - dlon).toFixed(5)), Number((clat - dlat).toFixed(5))],
+      [Number((clon + dlon).toFixed(5)), Number((clat - dlat).toFixed(5))],
+      [Number((clon + dlon).toFixed(5)), Number((clat + dlat).toFixed(5))],
+      [Number((clon - dlon).toFixed(5)), Number((clat + dlat).toFixed(5))],
+      [Number((clon - dlon).toFixed(5)), Number((clat - dlat).toFixed(5))],
+    ];
+    setFieldName(currentLocation.label ? `${currentLocation.label} Parcel` : `Parcel at ${clat.toFixed(4)}, ${clon.toFixed(4)}`);
+    setGeoJsonText(
+      JSON.stringify(
+        {
+          type: "Polygon",
+          coordinates: coords,
+        },
+        null,
+        2
+      )
+    );
+  }, [currentLocation]);
 
   // Parse coordinates safely for the map
   const activeCoordinates = useMemo<number[][]>(() => {
@@ -204,8 +234,20 @@ export default function FieldBoundaryPage() {
               {p.name}
             </button>
           ))}
+
+          {currentLocation && typeof currentLocation.latitude === "number" && (
+            <button
+              onClick={generateBoundaryForActiveLocation}
+              className="text-xs px-3 py-1 rounded-xl font-bold bg-[#eef7ec] text-[#2d7a3a] border border-[#d2e4d0] hover:bg-[#dce8da] transition flex items-center gap-1"
+            >
+              <Compass className="h-3.5 w-3.5" /> Delineate Active Location ({currentLocation.label})
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Universal Global Location Context Bar */}
+      <GlobalLocationBar />
 
       {/* Main Workspace: Parameters & Interactive Map */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

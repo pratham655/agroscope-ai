@@ -13,8 +13,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getRegionalRisk, type RegionalRiskResult } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 export default function RiskRadarPage() {
+  const { currentLocation } = useLocation();
   const [startDate, setStartDate] = useState("2023-01-01");
   const [endDate, setEndDate] = useState("2023-12-31");
   const [customLocations, setCustomLocations] = useState<{ lat: number; lon: number; label: string }[]>([]);
@@ -27,6 +30,23 @@ export default function RiskRadarPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RegionalRiskResult | null>(null);
+
+  const addActiveField = () => {
+    if (!currentLocation || typeof currentLocation.latitude !== "number" || typeof currentLocation.longitude !== "number") return;
+    const exists = customLocations.some(
+      (c) => Math.abs(c.lat - currentLocation.latitude) < 0.001 && Math.abs(c.lon - currentLocation.longitude) < 0.001
+    );
+    if (!exists) {
+      setCustomLocations((prev) => [
+        ...prev,
+        {
+          label: currentLocation.label || `Active Field (${currentLocation.latitude.toFixed(2)}, ${currentLocation.longitude.toFixed(2)})`,
+          lat: currentLocation.latitude,
+          lon: currentLocation.longitude,
+        },
+      ]);
+    }
+  };
 
   const fetchRisk = useCallback(async () => {
     setLoading(true);
@@ -116,6 +136,11 @@ export default function RiskRadarPage() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Universal Global Location Context Bar */}
+        <div className="mb-6">
+          <GlobalLocationBar />
+        </div>
+
         {/* Control bar */}
         <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs mb-8 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
@@ -191,6 +216,15 @@ export default function RiskRadarPage() {
             >
               <Plus className="h-3.5 w-3.5" /> Append Region
             </button>
+
+            {currentLocation && typeof currentLocation.latitude === "number" && (
+              <button
+                onClick={addActiveField}
+                className="px-3.5 py-1.5 bg-[#eef7ec] hover:bg-[#dce8da] text-[#2d7a3a] border border-[#d2e4d0] text-xs font-semibold rounded-xl flex items-center gap-1 transition"
+              >
+                <Compass className="h-3.5 w-3.5" /> Include Active Field ({currentLocation.label})
+              </button>
+            )}
 
             {customLocations.map((loc, i) => (
               <span

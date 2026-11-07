@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { TrendingUp, MapPin, Loader2, AlertTriangle, Calendar } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -45,13 +47,22 @@ function buildChartData(temp: MonthlyData, precip: MonthlyData) {
 }
 
 export default function HistoryPage() {
-  const [lat, setLat] = useState("");
-  const [lon, setLon] = useState("");
+  const { currentLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : ""));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : ""));
   const [startYear, setStart] = useState("2010");
   const [endYear, setEnd] = useState("2024");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<HistoryResponse | null>(null);
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+    }
+  }, [currentLocation]);
 
   const run = useCallback(async () => {
     const latN = parseFloat(lat),
@@ -132,6 +143,11 @@ export default function HistoryPage() {
 
       {/* Main Container */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Universal Global Location Context Bar */}
+        <div className="mb-6">
+          <GlobalLocationBar />
+        </div>
+
         {/* Controls Bar */}
         <div className="bg-white rounded-2xl p-6 border border-[#e2ece0] shadow-xs mb-8">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">

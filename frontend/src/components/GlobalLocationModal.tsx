@@ -75,14 +75,12 @@ export default function GlobalLocationModal() {
 
   useEffect(() => {
     if (isModalOpen) {
-      /* eslint-disable react-hooks/set-state-in-effect */
       setInputLat(String(currentLocation.latitude));
       setInputLon(String(currentLocation.longitude));
       setInputLabel(currentLocation.label);
       setSelectedCrop(currentLocation.crop || GLOBAL_CROPS[0]);
       setStartDate(currentLocation.startDate || "2023-01-01");
       setEndDate(currentLocation.endDate || "2023-12-31");
-      /* eslint-enable react-hooks/set-state-in-effect */
     }
   }, [isModalOpen, currentLocation]);
 

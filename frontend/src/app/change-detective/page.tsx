@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
   ScanEye,
@@ -12,6 +12,8 @@ import {
   Globe2,
 } from "lucide-react";
 import { compareChangeDetection, type ChangeDetectionResult } from "@/lib/api";
+import { useLocation } from "@/context/LocationContext";
+import GlobalLocationBar from "@/components/GlobalLocationBar";
 
 const SynchronizedChangeMap = dynamic(() => import("@/components/SynchronizedChangeMap"), {
   ssr: false,
@@ -62,8 +64,9 @@ const PRESET_COMPARISONS = [
 ];
 
 export default function ChangeDetectivePage() {
-  const [lat, setLat] = useState("38.34");
-  const [lon, setLon] = useState("-98.12");
+  const { currentLocation } = useLocation();
+  const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
+  const [lon, setLon] = useState(() => (currentLocation ? String(currentLocation.longitude) : "-98.12"));
   const [date1, setDate1] = useState("2022-07-15");
   const [date2, setDate2] = useState("2023-07-15");
   const windowDays = 30;
@@ -71,6 +74,14 @@ export default function ChangeDetectivePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ChangeDetectionResult | null>(null);
+
+  // Sync with universal LocationContext
+  useEffect(() => {
+    if (currentLocation && typeof currentLocation.latitude === "number" && typeof currentLocation.longitude === "number") {
+      setLat(String(currentLocation.latitude));
+      setLon(String(currentLocation.longitude));
+    }
+  }, [currentLocation]);
 
   const runComparison = useCallback(async () => {
     const latN = parseFloat(lat);
@@ -201,6 +212,9 @@ export default function ChangeDetectivePage() {
           </div>
         </div>
       </div>
+
+      {/* Universal Global Location Context Bar */}
+      <GlobalLocationBar />
 
       {/* Control Strip */}
       <div className="bg-white rounded-3xl p-6 border border-[#dce8da] shadow-xs space-y-4">
