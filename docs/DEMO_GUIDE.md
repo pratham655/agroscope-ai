@@ -1,218 +1,134 @@
 # AGROSCOPE AI — 5-Minute Competition Demo Guide
 
 **NASA Space Apps Challenge 2026 — Problem #7: Field Shift**  
-Tagline: *OBSERVE. ANTICIPATE. ADAPT.*
+**Tagline:** *OBSERVE. ANTICIPATE. ADAPT.*  
+**Platform Version:** 1.2.0 (Global Intelligence Architecture)
 
 ---
 
 ## Demo Overview
 
-This guide walks judges through a complete 5-minute demonstration covering all three pillars of AGROSCOPE AI: **OBSERVE** (see the planet), **ANTICIPATE** (understand risk), **ADAPT** (take action).
+This guide walks judges and evaluators through a complete 5-minute demonstration covering all three pillars of AGROSCOPE AI:
+- **OBSERVE** (Stream planetary satellite imagery & analyze local fields anywhere on Earth)
+- **ANTICIPATE** (Calculate physical drought indices, GDD curves, and climate scenario sensitivity)
+- **ADAPT** (Actionable crop rotation recommendations and AI copilot grounded in NASA telemetry)
 
 **Setup checklist before demo:**
-- [ ] Backend running: `cd backend && python -m uvicorn app.main:app --port 8000 --reload`
-- [ ] Frontend running: `cd frontend && pnpm dev` → open `http://localhost:3000`
-- [ ] Internet connection active (NASA POWER + GIBS require network)
-- [ ] Browser DevTools closed (clean presentation)
-- [ ] Screen at 1920×1080 or larger
+- [ ] Backend running: `cd backend && python -m uvicorn app.main:app --port 8000`
+- [ ] Frontend running: `cd frontend && pnpm start -- -p 3001` (or `pnpm dev` on port 3000)
+- [ ] Internet connection active (NASA POWER + GIBS streaming require network)
+- [ ] Browser window at 1920×1080 or 1440×900 resolution
 
 ---
 
 ## PART 1 — OBSERVE (1 min 30 sec)
 
-### Step 1: Homepage Introduction (20 sec)
-> *"AGROSCOPE AI is a global agricultural intelligence platform built on NASA Earth observation data — combining real-time satellite imagery, climate science and explainable AI to help farmers and decision-makers adapt to climate change."*
+### Step 1: Universal Global Location & Header (20 sec)
+> *"AGROSCOPE AI is an enterprise-grade global agricultural intelligence platform powered by NASA Earth observations. Unlike static prototypes locked to benchmark cities, AGROSCOPE AI operates for any geographical coordinates on the planet."*
 
-Point to the **homepage** (`http://localhost:3000`):
-- Read the tagline: **OBSERVE. ANTICIPATE. ADAPT.**
-- Briefly scan the 9 capability cards
-- Click **"Launch Earth Explorer"**
-
----
-
-### Step 2: 3D Earth Globe (40 sec)
-> *"We start by observing the Earth. This is a live 3D globe built with NASA-sourced texture data."*
-
-On the **Earth Explorer** page (`/explorer`):
-- The 3D globe auto-rotates — drag to spin it manually
-- Point out the **agricultural site markers** coloured by stress level
-  - Green = low stress | Red = extreme stress
-- Click **"Punjab, India"** in the right-side breadbasket drawer
-  - Globe flies to Punjab with smooth camera animation
-- Note the coordinate HUD updating in real-time
-
-> *"The globe shows 10 global breadbasket regions, colour-coded by current agricultural stress derived from NASA MERRA-2 data."*
-
-- Click the **"2D Satellite"** toggle
-- The view switches to live NASA GIBS satellite tiles
+Point to the **top navigation bar**:
+- Notice the **Active Field Pill** showing the current coordinates and crop (e.g., `Punjab Indo-Gangetic Basin • 30.7300°, 76.7800°`).
+- Click the **Active Field Pill** to open the **Global Location Modal**.
+- Show that users can search any city, enter arbitrary coordinates (e.g., `Chennai: 13.0827, 80.2707` or `Nairobi: -1.2921, 36.8219`), or click a quick preset.
+- Close the modal or select a location.
 
 ---
 
-### Step 3: Satellite Time Machine (30 sec)
-> *"Now let's travel through time using NASA satellite imagery."*
+### Step 2: Earth Explorer — Satellite Map Centerpiece (45 sec)
+> *"Let's observe our target field from orbit using NASA Global Imagery Browse Services (GIBS)."*
 
-Navigate to **Satellite Time Machine** (`/time-machine`) from the navigation:
+Navigate to **Earth Explorer** (`/explorer`):
+- **Map Centerpiece**: The 640px high-resolution satellite map immediately renders as the primary visual focus.
+- **Layer Switcher**:
+  - Switch between **Bands 7-2-1 False Color** (vegetation contrast), **MODIS TrueColor**, **NDVI 8-Day**, and **Land Surface Temperature**.
+  - Show how healthy cropland glows vibrant green in false color.
+- **Date Selector**: Scrub to previous agricultural seasons to observe historical vegetation density.
+- **3D Globe Mode**:
+  - Click the **3D Globe** toggle in the top control bar.
+  - Show the WebGL Earth globe with atmospheric Rayleigh scattering and global breadbasket markers.
+  - Click any preset to trigger an animated cinematic camera flight across the planet.
+  - Toggle back to **2D Satellite Map**.
 
-- Click **"Punjab Breadbasket"** preset → map centres on Punjab, India
-- Click **▶ Play** — the time-lapse begins, stepping through 2021→2024
-- Point to seasonal vegetation changes (green pulses = growing seasons)
+---
 
-> *"This is real NASA GIBS imagery from Terra MODIS — the Bands 7-2-1 false-colour composite specifically designed for agricultural land cover detection. Healthy vegetation appears bright green."*
+### Step 3: Satellite Time Machine & Change Detective (25 sec)
+> *"We can also inspect multi-year temporal transformations."*
 
-- Click the **Layer** switcher → switch to **TrueColor**
-- Pause the animation
+Briefly show **Satellite Time Machine** (`/time-machine`):
+- Click **Play (▶)** to watch annual crop cycles pulse across the landscape from 2020 through 2024.
+- Or open **Satellite Change Detective** (`/change-detective`) to demonstrate side-by-side synchronized comparison between two growing seasons.
 
 ---
 
 ## PART 2 — ANTICIPATE (2 min)
 
-### Step 4: Field Intelligence Engine — XAI Analysis (45 sec)
-> *"Let's analyse this field in depth."*
+### Step 4: Field Intelligence Engine — NASA POWER Pipeline (50 sec)
+> *"Now we anticipate agricultural risks with physical NASA Earth observation models."*
 
 Navigate to **Field Intelligence Engine** (`/analyze`):
-
-- Coordinates are pre-populated (or enter 30.9, 75.9 for Punjab)
-- Click **"Analyse Field"**
-- Wait for NASA POWER API response (~3–5 seconds)
-
-Point to the **XAI Stress Decomposition cards**:
-> *"This is explainable AI. We show exactly what's driving agricultural stress — not a black-box score. Four indicators, each with their weight:"*
-- 🌧️ **Drought Index (SPI-3)** — 35% weight — based on 3-month precipitation anomaly
-- 🌿 **Vegetation Health Proxy** — 30% weight — derived from MERRA-2 environmental data
-- 💧 **Soil Wetness** — 20% weight — MERRA-2 GWETTOP/GWETROOT variables
-- 🌡️ **Thermal Anomaly** — 15% weight — temperature departure from 30-year baseline
-
-> *"The composite stress score drives our crop suitability ranking below."*
+- The active field coordinates are already pre-populated from the universal `LocationContext`.
+- (Optional): Enter custom coordinates (e.g. `13.0827, 80.2707` for Chennai or your own coordinates).
+- Click **"Run Field Intelligence"**.
+- In 2–4 seconds, the engine streams real-time data from the NASA POWER API.
+- Point out the **Explainable AI (XAI) Stress Breakdown**:
+  - 🌧️ **SPI-3 Drought Index (35%)**: 2-parameter Gamma distribution fit of 90-day precipitation anomalies.
+  - 🌿 **Vegetation Health Proxy (30%)**: Derived from surface solar irradiance and moisture dynamics.
+  - 💧 **Root-Zone Soil Wetness (20%)**: Physical volumetric fraction ($0.0 - 1.0$) from MERRA-2.
+  - 🌡️ **Thermal Anomaly (15%)**: Temperature departure from the historical baseline.
+- Scroll down to the **Crop Suitability Heuristics**:
+  - Real-time compatibility ranking based on calculated Growing Degree Days (GDD) and water demand.
 
 ---
 
-### Step 5: Regional Risk Radar (30 sec)
-> *"Let's zoom out and compare risk globally."*
+### Step 5: Farm Futures Lab — Climate Sensitivity Simulation (40 sec)
+> *"How will this field fare under future climate change?"*
 
-Navigate to **Regional Risk Radar** (`/risk-radar`):
-
-- Click **"Run Risk Assessment"** with default regions
-- Wait for parallel NASA POWER fetches (~5–8 seconds)
-
-Point to the **ranked heatmap table**:
-> *"Five global breadbaskets ranked by composite stress. Punjab is compared to Kansas, the Nile Delta, the North China Plain and São Paulo."*
-
-- Click **"Simulate"** next to the highest-stress region
+Navigate to **Farm Futures Lab** (`/farm-futures`):
+- Point to the interactive climate scenario controls.
+- Increase **Temperature (+2.5°C)** and decrease **Precipitation (−25%)**.
+- Click **"Run Scenario Simulation"**.
+- Observe the dynamic delta graphs:
+  - Water deficit and drought risk intensify.
+  - High-water crops (like paddy rice) drop in suitability score.
+  - Climate-resilient alternatives (sorghum, millet, pulses) rise to the top.
 
 ---
 
-### Step 6: Farm Futures Lab — Climate Scenario (45 sec)
-> *"This takes us to our climate simulation workspace."*
+### Step 6: Smart Water Intelligence (30 sec)
+> *"Let's look at root-zone water balance."*
 
-On **Farm Futures Lab** (`/farm-futures`):
-- Select Punjab from the location picker (or confirm coordinates)
-- Click **"Load NASA Data"**
-
-> *"Baseline conditions loaded from NASA POWER — real historical climate data for this location."*
-
-- Adjust **Temperature slider** to **+2°C** (warming scenario)
-- Adjust **Precipitation slider** to **−20%** (drought scenario)
-- Click **"Run Simulation"**
-
-Point to the comparison:
-> *"The platform recalculates every indicator — SPI, GDD, crop suitability, water stress — under the simulated scenario and compares to baseline."*
-
-> *"Note the crop suitability ranking shift: drought-tolerant sorghum and millet rise. Water-intensive rice falls."*
+Navigate to **Smart Water Intelligence** (`/water-intel`):
+- Show the FAO-56 dual crop coefficient water balance model.
+- Inspect the **Soil Moisture Profile** (surface vs. root-zone) and the **Consecutive Dry-Days Risk Gauge**.
 
 ---
 
 ## PART 3 — ADAPT (1 min 30 sec)
 
-### Step 7: Farmer Action Copilot (30 sec)
-> *"Now let's help a farmer act on this intelligence."*
+### Step 7: Farmer Action Copilot — Live AI Agronomist (50 sec)
+> *"Finally, we help farmers and regional planners adapt through actionable decision support."*
 
 Navigate to **Farmer Action Copilot** (`/advisor`):
-
-- Select Punjab coordinates
-- Type: **"What crops should I plant given the drought risk this season?"**
-- Click **Send**
-
-> *"The Copilot synthesises NASA climate data, the XAI stress decomposition and agronomic knowledge to give a specific, cited recommendation — not generic advice."*
-
-Point to the **evidence citations** in the response.
+- Point to the **Active Field Context HUD** at the top:
+  - The AI assistant is automatically grounded with the field's actual coordinates, climate zone, current SPI drought score, soil moisture, and active crop.
+- Type a realistic agronomic query or click a quick prompt:
+  - *"Given the current soil moisture and precipitation trends, what cover crop or rotation strategy should I adopt for the next season?"*
+- Observe the streaming AI response:
+  - Notice specific references to the real NASA telemetry (e.g., current SPI level, root-zone moisture percentage).
+  - Highlights specific drought-tolerant cultivars, planting calendar shifts, and irrigation conservation techniques.
+- Point out the **Model & Grounding Badge**:
+  - Confirms OpenRouter LLM execution with full telemetry provenance.
 
 ---
 
-### Step 8: Field Intelligence Dossier + PDF Export (30 sec)
-> *"Finally, we can generate a formal field intelligence dossier."*
+### Step 8: Field Intelligence Dossier & PDF Export (40 sec)
+> *"Every analysis can be exported as an executive report for agronomists, extension officers, or insurers."*
 
 Navigate to **Field Intelligence Dossier** (`/reports`):
-
-- Coordinates auto-populate from previous session
-- Click **"Generate Dossier"**
-
-> *"This generates a complete field intelligence report with executive summary, NASA telemetry, XAI decomposition, crop suitability matrix and full data provenance."*
-
-- Click **"Export PDF"**
-- PDF downloads in browser
-
-> *"A farmer, agronomist or government planner can share this PDF with their team — derived entirely from free, open NASA data."*
+- Review the assembled report with executive risk score, climate charts, crop rotation matrix, and NASA data provenance disclosures.
+- Click **"Export PDF"** to generate an immediate, clean, multi-page PDF document.
 
 ---
 
-### Step 9: Closing Statement (30 sec)
-
-Navigate back to **homepage**:
-
-> *"AGROSCOPE AI demonstrates how NASA's open Earth observation data — POWER, GIBS, MERRA-2, MODIS, VIIRS — can be transformed into an accessible, actionable intelligence platform for agricultural adaptation.*
-
-> *We observe the planet through real NASA satellite imagery. We anticipate stress through NASA-powered climate science and explainable AI. And we help farmers and communities adapt — one field at a time.*
-
-> *OBSERVE. ANTICIPATE. ADAPT."*
-
----
-
-## Quick Reference — Key URLs
-
-| Feature | URL |
-|---------|-----|
-| Homepage | `http://localhost:3000` |
-| Earth Explorer (3D/2D) | `http://localhost:3000/explorer` |
-| Satellite Time Machine | `http://localhost:3000/time-machine` |
-| Change Detective | `http://localhost:3000/change-detective` |
-| Farm Futures Lab | `http://localhost:3000/farm-futures` |
-| Farmer Action Copilot | `http://localhost:3000/advisor` |
-| Field Boundary Intelligence | `http://localhost:3000/field-boundary` |
-| Regional Risk Radar | `http://localhost:3000/risk-radar` |
-| Field Intelligence Engine | `http://localhost:3000/analyze` |
-| Field Intelligence Dossier | `http://localhost:3000/reports` |
-| Historical Climate Trends | `http://localhost:3000/history` |
-| Smart Water Intelligence | `http://localhost:3000/water-intel` |
-| Crop Phenology Tracker | `http://localhost:3000/phenology` |
-| Methodology & Science | `http://localhost:3000/about` |
-| Backend API Docs | `http://127.0.0.1:8000/api/docs` |
-
----
-
-## Fallback Locations
-
-If NASA POWER is slow, use these pre-tested coordinates:
-
-| Location | Lat | Lon | Notes |
-|----------|-----|-----|-------|
-| Punjab, India | 30.9 | 75.9 | Primary demo location |
-| Kansas, USA | 38.5 | −98.5 | Good wheat baseline |
-| Nile Delta, Egypt | 31.0 | 31.0 | Often high stress |
-| São Paulo, Brazil | −21.0 | −48.0 | Tropical agriculture |
-| North China Plain | 38.0 | 115.0 | Wheat-maize system |
-
----
-
-## Anticipated Judge Questions
-
-**Q: Is this using real NASA data or simulated data?**  
-A: All data is live. NASA POWER is queried in real-time for every analysis. NASA GIBS tiles are streamed live from NASA's Earthdata CDN. No data is pre-loaded or mocked.
-
-**Q: Why isn't this using real NDVI?**  
-A: We use an MERRA-2-derived vegetation health proxy clearly labelled as such throughout the app. Direct MODIS NDVI products (MOD13A1) require NASA Earthdata authentication. Our proxy correlates well with NDVI at coarse scales and is derived from physical NASA variables.
-
-**Q: What would it take to scale this to production?**  
-A: Backend would need: a database (PostgreSQL), caching layer (Redis for POWER responses), authentication, and deployment to cloud (GCP/AWS). Frontend is already production-build capable. The NASA API integrations scale well — POWER has no rate limit for research use.
-
-**Q: How is this different from existing tools like CROP-MONITOR?**  
-A: AGROSCOPE AI uniquely combines: (1) XAI decomposition showing which factors drive stress, (2) interactive 3D/2D visualization with real-time GIBS imagery, (3) conversational AI copilot, and (4) climate scenario simulation — all in one integrated platform accessible without login or subscription.
+## Conclusion (10 sec)
+> *"AGROSCOPE AI transforms raw NASA satellite pixels and climate reanalysis into actionable, localized agricultural intelligence for any field on Earth. Observe. Anticipate. Adapt."*

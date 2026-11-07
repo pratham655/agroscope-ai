@@ -71,7 +71,7 @@ Browser (localhost:3000)
 | NumPy | 1.26+ | Numerical arrays, scientific computation |
 | Pandas | 2.x | Time-series data manipulation |
 | SciPy | 1.12+ | Gamma distribution fitting (SPI), statistical functions |
-| pytest | 8.x | Test framework (36 unit tests) |
+| pytest | 8.x | Test framework (87 unit & integration tests) |
 
 ---
 
@@ -82,17 +82,23 @@ Browser (localhost:3000)
 | Method | Path | Module | Description |
 |--------|------|--------|-------------|
 | GET | `/api/health` | main.py | Service health check |
-| POST | `/api/scenarios/simulate` | scenarios.py | Farm Futures Lab simulation |
-| GET | `/api/scenarios/reverse-geocode` | scenarios.py | Lat/lon → place name (Nominatim) |
-| POST | `/api/analysis/field` | analysis.py | XAI field intelligence analysis |
+| GET | `/api/location/presets` | location.py | Global benchmark location presets |
+| GET | `/api/location/validate` | location.py | Coordinate bounds & validity verification |
+| POST | `/api/location/geocode` | location.py | Forward geocoding (place name → lat/lon) |
+| GET | `/api/location/reverse-geocode` | location.py | Reverse geocoding (lat/lon → place name) |
+| POST | `/api/field-intelligence/analyze` | field_intelligence.py | Full XAI field intelligence pipeline with NASA data |
+| GET/POST | `/api/copilot/status`, `/chat` | copilot.py | Live OpenRouter AI chat with NASA context & fallback |
 | POST | `/api/advisor/recommendations` | advisor.py | Rule-based agronomic recommendations |
-| GET | `/api/copilot/status` | copilot.py | Copilot AI status & configured model |
-| POST | `/api/copilot/chat` | copilot.py | OpenRouter AI chat with NASA context & fallback |
-| POST | `/api/history/climate` | history.py | Historical climate trend data |
-| POST | `/api/phenology/detect` | phenology.py | Crop phenological event detection |
-| POST | `/api/risk/regional` | risk.py | Multi-region risk ranking |
-| POST | `/api/reports/field-report` | reports.py | Markdown field intelligence report |
-| POST | `/api/water/analysis` | water.py | Smart Water Intelligence |
+| POST | `/api/scenarios/simulate` | scenarios.py | Farm Futures Lab climate scenario simulation |
+| GET | `/api/change-detection/compare` | change_detection.py | Dual-window satellite change detection metrics |
+| GET/POST | `/api/water/analysis` | water_intelligence.py | Smart Water Intelligence & FAO-56 balance |
+| POST | `/api/phenology/detect` | phenology.py | Phenological curve & DOY event detection |
+| POST | `/api/risk/regional` | risk_radar.py | Multi-region composite agricultural risk ranking |
+| POST | `/api/field/boundary-analysis` | field_boundary.py | Spatial polygon boundary analysis |
+| POST | `/api/reports/field-report` | reports.py | Markdown & PDF field intelligence report export |
+| GET | `/api/power/point` | power.py | Raw daily NASA POWER meteorological telemetry |
+| GET | `/api/vegetation/indices` | vegetation.py | Derived vegetation index series |
+| GET | `/api/soil-moisture/profile` | soil_moisture.py | Root-zone & surface soil moisture profile |
 
 ### Frontend API Calls (Next.js, port 3000)
 
@@ -218,11 +224,23 @@ Client-side only — no server-side PDF rendering.
 
 ---
 
-## 10. State Management
+## 10. Universal Location & State Management
 
-No global state library (Redux/Zustand) is used. State is managed with:
-- **React `useState`** / **`useRef`** at component level
-- **URL search params** for shareable coordinates across pages
-- **`localStorage`** (not used — stateless design)
+State is managed through a layered, SSR-compatible architecture:
 
-This keeps the bundle lightweight and SSR-compatible.
+1. **`LocationContext` (`src/context/LocationContext.tsx`)**:
+   - Single source of truth for the active global agricultural field (`latitude`, `longitude`, `label`, `crop`, `source`).
+   - Automatically synchronizes across all 12 modules (`/explorer`, `/analyze`, `/advisor`, `/farm-futures`, `/water-intel`, `/phenology`, `/risk-radar`, `/change-detective`, `/field-boundary`, `/reports`, `/time-machine`, `/history`).
+   - Validates coordinates within physical bounds (`[-90, 90]` latitude, `[-180, 180]` longitude).
+   - Persists user selections in `localStorage` (`agroscope_active_location`) and broadcasts updates via window storage events.
+   - Global modal dialog (`<GlobalLocationModal />`) and banner (`<GlobalLocationBar />`) accessible anywhere via header navigation.
+
+2. **Component-level State (`useState`, `useRef`, `useCallback`)**:
+   - Manages interactive UI states (tab selection, animation frames, modal toggles, chart zoom).
+
+3. **URL Search Parameters (`URLSearchParams`)**:
+   - Enables direct deep-linking to coordinates, dates, and view modes (e.g. `?mode=3d`, `?lat=13.0827&lon=80.2707`).
+
+4. **Zero State Desynchronization**:
+   - Prevents stale benchmark context from leaking into arbitrary coordinate analyses.
+   - Provides clear visual indicators when viewing custom field coordinates versus benchmark presets.

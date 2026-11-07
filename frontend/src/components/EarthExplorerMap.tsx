@@ -171,6 +171,10 @@ export default function EarthExplorerMap({
   // Robust, lifecycle-safe Leaflet initialization
   useEffect(() => {
     let isCancelled = false;
+    let t1: NodeJS.Timeout | undefined;
+    let t2: NodeJS.Timeout | undefined;
+    let t3: NodeJS.Timeout | undefined;
+    let handleResize: (() => void) | undefined;
     const domNode = containerRef.current;
     if (!domNode || typeof window === "undefined") return;
 
@@ -208,11 +212,11 @@ export default function EarthExplorerMap({
       // Add Zoom control at top right
       L.control.zoom({ position: "topright" }).addTo(map);
 
-      // Base Topo layer underneath
+      // Base Topo layer underneath with crisp visibility
       const baseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
         attribution: "© OpenStreetMap contributors, © CARTO",
         subdomains: "abcd",
-        opacity: 0.35,
+        opacity: activeLayerKey === "osm_topo" ? 1.0 : 0.7,
         maxZoom: 18,
         maxNativeZoom: 18,
       }).addTo(map);
@@ -222,11 +226,19 @@ export default function EarthExplorerMap({
       const initUrl = buildGibsUrl(activeLayer, selectedDate);
       const satLayer = L.tileLayer(initUrl, {
         attribution: "NASA GIBS / Earthdata",
-        opacity: activeLayerKey === "osm_topo" ? 1.0 : 0.95,
+        opacity: activeLayerKey === "osm_topo" ? 0.0 : 0.95,
         maxZoom: 18,
         maxNativeZoom: activeLayer.maxNativeZoom,
       }).addTo(map);
       gibsTileRef.current = satLayer;
+
+      // Invalidate size on mount and staggered timers to ensure instant tile rendering
+      t1 = setTimeout(() => { try { map.invalidateSize(); } catch {} }, 100);
+      t2 = setTimeout(() => { try { map.invalidateSize(); } catch {} }, 350);
+      t3 = setTimeout(() => { try { map.invalidateSize(); } catch {} }, 750);
+
+      handleResize = () => { try { map.invalidateSize(); } catch {} };
+      window.addEventListener("resize", handleResize);
 
       // Tile loading indicators
       satLayer.on("loading", () => setTileLoading(true));
@@ -266,6 +278,10 @@ export default function EarthExplorerMap({
 
     return () => {
       isCancelled = true;
+      if (t1) clearTimeout(t1);
+      if (t2) clearTimeout(t2);
+      if (t3) clearTimeout(t3);
+      if (handleResize) window.removeEventListener("resize", handleResize);
       if (mapRef.current) {
         try {
           mapRef.current.remove();
@@ -281,29 +297,49 @@ export default function EarthExplorerMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sync when initialLat or initialLon prop changes externally
+  useEffect(() => {
+    if (typeof initialLat === "number" && typeof initialLon === "number") {
+      setCurrentCoords({ lat: initialLat, lon: initialLon });
+      if (mapRef.current) {
+        mapRef.current.flyTo([initialLat, initialLon], mapRef.current.getZoom(), { duration: 0.8 });
+      }
+      if (markerRef.current) {
+        markerRef.current.setLatLng([initialLat, initialLon]);
+        markerRef.current.setPopupContent(`<b>Observation Target</b><br/>${initialLat.toFixed(4)}°, ${initialLon.toFixed(4)}°`);
+      }
+    }
+  }, [initialLat, initialLon]);
+
   // Update Satellite Layer when active layer or date changes
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
 
     import("leaflet").then((L) => {
+      if (baseTileRef.current) {
+        baseTileRef.current.setOpacity(activeLayerKey === "osm_topo" ? 1.0 : 0.7);
+      }
       if (gibsTileRef.current) {
         map.removeLayer(gibsTileRef.current);
+        gibsTileRef.current = null;
       }
 
-      const newUrl = buildGibsUrl(activeLayer, selectedDate);
-      const newSat = L.tileLayer(newUrl, {
-        attribution: activeLayerKey === "osm_topo" ? "© OpenStreetMap contributors, © CARTO" : "NASA GIBS / Earthdata",
-        opacity: activeLayerKey === "osm_topo" ? 1.0 : 0.95,
-        maxZoom: 18,
-        maxNativeZoom: activeLayer.maxNativeZoom,
-      }).addTo(map);
+      if (activeLayerKey !== "osm_topo") {
+        const newUrl = buildGibsUrl(activeLayer, selectedDate);
+        const newSat = L.tileLayer(newUrl, {
+          attribution: "NASA GIBS / Earthdata",
+          opacity: 0.95,
+          maxZoom: 18,
+          maxNativeZoom: activeLayer.maxNativeZoom,
+        }).addTo(map);
 
-      newSat.on("loading", () => setTileLoading(true));
-      newSat.on("load", () => setTileLoading(false));
-      newSat.on("tileerror", () => setTileLoading(false));
+        newSat.on("loading", () => setTileLoading(true));
+        newSat.on("load", () => setTileLoading(false));
+        newSat.on("tileerror", () => setTileLoading(false));
 
-      gibsTileRef.current = newSat;
+        gibsTileRef.current = newSat;
+      }
     });
   }, [activeLayerKey, selectedDate, activeLayer]);
 
@@ -403,7 +439,11 @@ export default function EarthExplorerMap({
       </div>
 
       {/* Map DOM Element */}
-      <div ref={containerRef} className="w-full h-[520px] sm:h-[620px] z-0" />
+      <div
+        ref={containerRef}
+        className="w-full relative z-0 cursor-crosshair"
+        style={{ height: "640px", minHeight: "560px", width: "100%" }}
+      />
 
       {/* Bottom Right Scientific Attribution */}
       <div className="absolute bottom-3 right-3 z-[400] pointer-events-none text-[10px] text-white/70 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-md">
