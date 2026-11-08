@@ -591,7 +591,7 @@ async def _fetch_nominatim_reverse(lat: float, lon: float) -> Optional[Dict[str,
     timeout_cfg = httpx.Timeout(timeout=5.0, connect=1.0, read=3.0, write=0.5, pool=0.5)
 
     async def _do_reverse() -> Optional[Dict[str, Any]]:
-        await asyncio.to_thread(_wait_for_nominatim_slot)
+        await _wait_for_nominatim_slot()
         async with httpx.AsyncClient(timeout=timeout_cfg, limits=httpx.Limits(max_connections=1, max_keepalive_connections=1)) as client:
             resp = await client.get("https://nominatim.openstreetmap.org/reverse", params=params, headers=headers)
             if resp.status_code != 200:
