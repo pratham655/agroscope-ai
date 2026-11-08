@@ -539,3 +539,51 @@ def test_geocode_nominatim_live_success_simulation():
         assert abs(heidelberg["longitude"] - 8.6908) < 0.001
         assert heidelberg["country"] == "Germany"
         assert heidelberg["source"] == "OpenStreetMap Nominatim"
+
+
+# ─── 11. Public Nominatim usage policy regressions ───────────────────────────
+
+def test_curated_locality_hit_does_not_call_public_nominatim():
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        response = client.get("/api/location/geocode", params={"query": "mumbai, india"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["results"][0]["name"] == "Mumbai"
+        assert mock_get.await_count == 0
+
+
+def test_nominatim_search_cache_reuses_successful_response():
+    from app.api import location as location_api
+    location_api._nominatim_cache.clear()
+    req = httpx.Request("GET", "https://nominatim.openstreetmap.org/search")
+    upstream = httpx.Response(200, json=[{"lat": "49.40768", "lon": "8.69079", "display_name": "Heidelberg", "name": "Heidelberg", "address": {"city": "Heidelberg", "country": "Germany"}}], request=req)
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=upstream) as mock_get:
+        first = client.get("/api/location/geocode", params={"query": "heidelberg cache test"})
+        second = client.get("/api/location/geocode", params={"query": "heidelberg cache test"})
+        assert first.status_code == second.status_code == 200
+        assert first.json()["results"] == second.json()["results"]
+        assert mock_get.await_count == 1
+
+
+def test_nominatim_request_uses_project_identity_not_unowned_nasa_email():
+    from app.api import location as location_api
+    assert "github.com/pratham655/agroscope-ai" in location_api._NOMINATIM_USER_AGENT
+    assert "nasa.gov" not in location_api._NOMINATIM_USER_AGENT
+
+
+def test_real_slow_nominatim_request_is_cancelled_by_total_timeout():
+    from app.api import location as location_api
+    location_api._nominatim_cache.clear()
+
+    async def slow_request(*args, **kwargs):
+        await asyncio.sleep(0.2)
+        return httpx.Response(200, json=[])
+
+    async def immediate_timeout(awaitable, timeout):
+        if hasattr(awaitable, "close"):
+            awaitable.close()
+        raise asyncio.TimeoutError
+
+    with patch("httpx.AsyncClient.get", new=slow_request), patch.object(location_api.asyncio, "wait_for", new=immediate_timeout):
+        result = asyncio.run(location_api._fetch_nominatim_search("slow upstream regression", limit=4))
+        assert result == []
