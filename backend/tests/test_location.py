@@ -338,13 +338,17 @@ def test_reverse_geocode_unknown_coords_no_preset_substitution():
 
 # ─── 7. Actual Response Latency Upper Bounds ─────────────────────────────────
 
-def test_response_latency_bounds():
+def test_response_latency_bounds(monkeypatch):
     """
-    Verify actual response latency remains strictly within acceptable upper bounds:
-      - /api/location/presets: < 50ms
-      - /api/location/geocode (offline match): < 100ms
-      - /api/location/reverse-geocode (coordinate math fallback): < 100ms
+    Verify endpoint overhead independently from the intentional Nominatim pacing policy.
     """
+    from app.api import location as location_api
+
+    async def no_rate_limit_wait():
+        return None
+
+    monkeypatch.setattr(location_api, "_wait_for_nominatim_slot", no_rate_limit_wait)
+
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         req = httpx.Request("GET", "https://nominatim.openstreetmap.org/search")
         mock_get.return_value = httpx.Response(status_code=200, json=[], request=req)
@@ -575,6 +579,11 @@ def test_real_slow_nominatim_request_is_cancelled_by_total_timeout(monkeypatch):
     from app.api import location as location_api
     location_api._nominatim_cache.clear()
     monkeypatch.setattr(location_api, "_NOMINATIM_TOTAL_TIMEOUT_S", 0.01)
+
+    async def no_rate_limit_wait():
+        return None
+
+    monkeypatch.setattr(location_api, "_wait_for_nominatim_slot", no_rate_limit_wait)
 
     async def slow_request(*args, **kwargs):
         await asyncio.sleep(0.2)
