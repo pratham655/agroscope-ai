@@ -471,14 +471,22 @@ def _cache_set(key: tuple, value: Any) -> None:
         _nominatim_cache[key] = (now + _NOMINATIM_CACHE_TTL_S, value)
 
 
-def _wait_for_nominatim_slot() -> None:
-    """Serialize public-service calls and enforce a 1.05-second minimum interval."""
+async def _wait_for_nominatim_slot() -> None:
+    """Cancellably serialize calls and enforce Nominatim's minimum request interval."""
     global _nominatim_last_request_at
-    with _nominatim_gate:
+
+    # Poll for the process-wide lock asynchronously. A blocking acquire or sleep
+    # in a worker thread cannot be stopped when the surrounding request times out.
+    while not _nominatim_gate.acquire(blocking=False):
+        await asyncio.sleep(0.01)
+
+    try:
         delay = _NOMINATIM_MIN_INTERVAL_S - (time.monotonic() - _nominatim_last_request_at)
         if delay > 0:
-            time.sleep(delay)
+            await asyncio.sleep(delay)
         _nominatim_last_request_at = time.monotonic()
+    finally:
+        _nominatim_gate.release()
 
 
 def _is_broad_country_query(query: str) -> bool:
@@ -546,7 +554,7 @@ async def _fetch_nominatim_search(query: str, limit: int = 7) -> List[Dict[str, 
     timeout_cfg = httpx.Timeout(timeout=5.0, connect=1.0, read=3.0, write=0.5, pool=0.5)
 
     async def _do_search() -> List[Dict[str, Any]]:
-        await asyncio.to_thread(_wait_for_nominatim_slot)
+        await _wait_for_nominatim_slot()
         async with httpx.AsyncClient(timeout=timeout_cfg, limits=httpx.Limits(max_connections=1, max_keepalive_connections=1)) as client:
             resp = await client.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers)
             if resp.status_code != 200:
