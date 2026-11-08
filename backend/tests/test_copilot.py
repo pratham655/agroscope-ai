@@ -94,6 +94,8 @@ class TestOpenRouterService:
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
                 result = asyncio.run(or_service.openrouter_chat("What crop should I plant?", _SAMPLE_CTX))
         assert result == _GOOD_REPLY
+        request_payload = mock_client.post.call_args.kwargs["json"]
+        assert request_payload["max_tokens"] == 1800
 
     def test_timeout_raises_unavailable(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
