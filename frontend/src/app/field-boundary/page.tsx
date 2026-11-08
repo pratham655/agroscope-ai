@@ -9,7 +9,7 @@ import { useLocation } from "@/context/LocationContext";
 const FieldBoundaryMap = dynamic(() => import("@/components/FieldBoundaryMap"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[400px] rounded-xl bg-slate-900 flex flex-col items-center justify-center text-slate-300 gap-2 border border-slate-700">
+    <div className="w-full h-[520px] rounded-xl bg-slate-900 flex flex-col items-center justify-center text-slate-300 gap-2 border border-slate-700">
       <Globe2 className="h-8 w-8 text-emerald-400 animate-spin" />
       <div className="text-xs font-semibold text-white">
         Projecting Field Boundary onto NASA GIBS Surface Reflectance...
@@ -18,45 +18,67 @@ const FieldBoundaryMap = dynamic(() => import("@/components/FieldBoundaryMap"), 
   ),
 });
 
+function parsePolygonGeometry(input: unknown): { type: "Polygon"; coordinates: number[][][] } {
+  if (!input || typeof input !== "object") throw new Error("GeoJSON must be an object.");
+  const candidate = input as { type?: string; geometry?: unknown; coordinates?: unknown };
+  const geometry = candidate.type === "Feature" ? candidate.geometry as { type?: string; coordinates?: unknown } : candidate;
+  if (!geometry || geometry.type !== "Polygon" || !Array.isArray(geometry.coordinates)) {
+    throw new Error("Only GeoJSON Polygon or Feature<Polygon> files are supported.");
+  }
+  const raw = geometry.coordinates as unknown[];
+  const rings = Array.isArray(raw[0]) && Array.isArray((raw[0] as unknown[])[0])
+    ? raw as number[][][]
+    : [raw as number[][]];
+  const outer = rings[0];
+  if (!Array.isArray(outer) || outer.length < 4 || outer.some((point) =>
+    !Array.isArray(point) || point.length < 2 ||
+    !Number.isFinite(point[0]) || !Number.isFinite(point[1]) ||
+    point[0] < -180 || point[0] > 180 || point[1] < -90 || point[1] > 90
+  )) {
+    throw new Error("Polygon coordinates must contain at least four valid [longitude, latitude] positions.");
+  }
+  return { type: "Polygon", coordinates: rings };
+}
+
 const PRESET_POLYGONS = [
   {
     name: "Kansas Wheat Field #4 (180 ha)",
     coordinates: [
-      [-98.14, 38.33],
-      [-98.10, 38.33],
-      [-98.10, 38.36],
-      [-98.14, 38.36],
-      [-98.14, 38.33],
+      [-98.127683, 38.338974],
+      [-98.112317, 38.338974],
+      [-98.112317, 38.351026],
+      [-98.127683, 38.351026],
+      [-98.127683, 38.338974],
     ],
   },
   {
     name: "Iowa Corn Demo Plot (95 ha)",
     coordinates: [
-      [-93.64, 41.84],
-      [-93.61, 41.84],
-      [-93.61, 41.87],
-      [-93.64, 41.87],
-      [-93.64, 41.84],
+      [-93.630878, 41.850622],
+      [-93.619122, 41.850622],
+      [-93.619122, 41.859378],
+      [-93.630878, 41.859378],
+      [-93.630878, 41.850622],
     ],
   },
   {
     name: "Punjab Agroforestry (120 ha)",
     coordinates: [
-      [76.76, 30.72],
-      [76.80, 30.72],
-      [76.80, 30.75],
-      [76.76, 30.75],
-      [76.76, 30.72],
+      [76.774276, 30.730080],
+      [76.785724, 30.730080],
+      [76.785724, 30.739920],
+      [76.774276, 30.739920],
+      [76.774276, 30.730080],
     ],
   },
   {
     name: "California Almond Orchard (65 ha)",
     coordinates: [
-      [-119.79, 36.73],
-      [-119.76, 36.73],
-      [-119.76, 36.76],
-      [-119.79, 36.76],
-      [-119.79, 36.73],
+      [-119.779519, 36.741379],
+      [-119.770481, 36.741379],
+      [-119.770481, 36.748621],
+      [-119.779519, 36.748621],
+      [-119.779519, 36.741379],
     ],
   },
 ];
@@ -107,28 +129,19 @@ export default function FieldBoundaryPage() {
 
   const activeCoords = useMemo(() => {
     try {
-      const obj = JSON.parse(geoJsonText);
-      if (obj.type === "Polygon" && Array.isArray(obj.coordinates)) {
-        return Array.isArray(obj.coordinates[0][0]) ? obj.coordinates[0] : obj.coordinates;
-      }
+      return parsePolygonGeometry(JSON.parse(geoJsonText)).coordinates[0] ?? [];
     } catch {
-      // fallback
+      return [];
     }
-    return PRESET_POLYGONS[0].coordinates;
   }, [geoJsonText]);
 
   const runAnalysis = useCallback(async () => {
     setError(null);
     let parsedGeom: { type: "Polygon"; coordinates: number[][][] };
     try {
-      const obj = JSON.parse(geoJsonText);
-      if (obj.type !== "Polygon" || !Array.isArray(obj.coordinates)) {
-        throw new Error("Invalid GeoJSON Polygon");
-      }
-      const coords = Array.isArray(obj.coordinates[0][0]) ? obj.coordinates : [obj.coordinates];
-      parsedGeom = { type: "Polygon", coordinates: coords };
-    } catch {
-      setError("Invalid JSON format. Please ensure valid GeoJSON Polygon syntax with coordinates [[lon, lat], ...].");
+      parsedGeom = parsePolygonGeometry(JSON.parse(geoJsonText));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid GeoJSON Polygon.");
       return;
     }
 
@@ -188,12 +201,12 @@ export default function FieldBoundaryPage() {
               Field Boundary Intelligence: Vector Parcel Geometry & Geodesic Telemetry
             </h1>
             <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed">
-              Delineate custom agricultural parcels via vector GeoJSON boundaries. Computes WGS84 ellipsoidal geodesics (hectares, perimeter, and centroid) and overlays calibrated NASA surface reflectance and agroclimatological reanalysis directly onto cadastral boundaries.
+              Delineate agricultural parcels with GeoJSON boundaries, inspect approximate parcel area and perimeter, and overlay NASA satellite imagery with regional agroclimatological context. Climate indicators remain regional reanalysis estimates, not sub-field measurements.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <span className="px-3 py-1.5 rounded-lg bg-black/25 backdrop-blur-md border border-white/20 text-xs font-mono text-emerald-200">
-              WGS-84 Ellipsoid &bull; Sub-Field Precision
+              WGS-84 Coordinates &bull; Regional Telemetry
             </span>
           </div>
         </div>
@@ -214,8 +227,7 @@ export default function FieldBoundaryPage() {
             </span>
           </div>
           <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
-            Delineate custom field parcels via GeoJSON polygons. Calculate exact geodesics (hectares, perimeter, and centroid)
-            and overlay calibrated NASA POWER agroclimatology directly onto land boundaries.
+            Delineate field parcels from GeoJSON polygons. Review approximate area, perimeter and centroid, then run regional NASA POWER analysis at the parcel centroid.
           </p>
         </div>
 
@@ -300,13 +312,13 @@ export default function FieldBoundaryPage() {
       )}
 
       {/* ── Main Layout: Map (7 cols) + GeoJSON Editor / Results (5 cols) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <div className="grid grid-cols-1 gap-5 items-start">
         {/* Interactive Boundary Map */}
-        <div className="lg:col-span-7 space-y-2">
+        <div className="w-full min-w-0 space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-[#0d3b2e]" />
-              <span>Parcel Boundary Viewport (NASA GIBS Basemap)</span>
+              <span>Live Parcel Boundary Map</span>
             </h2>
             <span className="text-[10px] text-slate-500 font-mono">
               EPSG:4326 WGS-84 &bull; EPSG:3857 Display
@@ -321,7 +333,7 @@ export default function FieldBoundaryPage() {
         </div>
 
         {/* Right: GeoJSON Editor & Calculated Metrics */}
-        <div className="lg:col-span-5 space-y-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
           {/* GeoJSON Polygon Editor */}
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-2xs space-y-2">
             <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
@@ -379,14 +391,14 @@ export default function FieldBoundaryPage() {
                 <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                   <div className="text-[10px] text-slate-500 uppercase font-semibold">Centroid Latitude</div>
                   <div className="text-sm font-bold font-mono text-slate-900 mt-0.5">
-                    {result.boundary_metrics.centroid.latitude.toFixed(4)}°N
+                    {Math.abs(result.boundary_metrics.centroid.latitude).toFixed(4)}°{result.boundary_metrics.centroid.latitude >= 0 ? "N" : "S"}
                   </div>
                 </div>
 
                 <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
                   <div className="text-[10px] text-slate-500 uppercase font-semibold">Centroid Longitude</div>
                   <div className="text-sm font-bold font-mono text-slate-900 mt-0.5">
-                    {result.boundary_metrics.centroid.longitude.toFixed(4)}°E
+                    {Math.abs(result.boundary_metrics.centroid.longitude).toFixed(4)}°{result.boundary_metrics.centroid.longitude >= 0 ? "E" : "W"}
                   </div>
                 </div>
               </div>

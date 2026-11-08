@@ -2,7 +2,7 @@
 Field Boundary Intelligence — Polygon-based Field Analysis API.
 
 Allows farmers and agronomists to delineate field polygons (GeoJSON),
-calculates geometric properties (centroid, bounding box, perimeter, area in hectares),
+calculates approximate local-planar properties (centroid, bounding box, perimeter, area in hectares),
 and executes the Field Intelligence analysis at the centroid.
 
 Scientific resolution disclaimer:
@@ -25,7 +25,7 @@ router = APIRouter()
 
 def _polygon_centroid_and_area(coordinates: List[List[float]]) -> Dict[str, Any]:
     """
-    Computes polygon centroid and geodesic area for a single ring polygon.
+    Computes a planar centroid and local-scale area/perimeter approximation for one polygon ring.
     Coordinates format: [[lon1, lat1], [lon2, lat2], ...] (GeoJSON standard).
     """
     if len(coordinates) < 4:
@@ -74,7 +74,7 @@ def _polygon_centroid_and_area(coordinates: List[List[float]]) -> Dict[str, Any]
         centroid_lon = cx
         centroid_lat = cy
 
-        # Geodesic area approximation (spherical excess or projected conversion)
+        # Local equirectangular approximation; not an ellipsoidal geodesic calculation.
         # 1 deg lat ~ 111,320 m; 1 deg lon ~ 111,320 * cos(mid_lat) m
         mean_lat_rad = math.radians((min_lat + max_lat) / 2.0)
         m_per_deg_lat = 111320.0
@@ -182,7 +182,7 @@ async def analyze_field_boundary(
         "analysis": analysis_res,
         "spatial_resolution_disclaimer": (
             "⚠️ Boundary intelligence calculates exact perimeter, centroid, and area for the user-drawn field. "
-            "However, meteorological and agroclimatological indicators originate from NASA POWER / MERRA-2 "
+            "These geometry metrics are not survey-grade geodesics. Meteorological and agroclimatological indicators originate from NASA POWER / MERRA-2 "
             "reanalysis at ~55 km (0.5° × 0.625°) spatial resolution. Sub-field soil variations and microtopography "
             "are not resolved by NASA POWER gridded data."
         )

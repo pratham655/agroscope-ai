@@ -1,16 +1,34 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Maximize2, MapPin } from "lucide-react";
-import type { Map as LeafletMap, GeoJSON as LeafletGeoJSON, TileLayer as LeafletTileLayer } from "leaflet";
+import { AlertTriangle, Maximize2, MapPin, RefreshCw } from "lucide-react";
+import type { Map as LeafletMap, GeoJSON as LeafletGeoJSON, TileLayer as LeafletTileLayer, Marker as LeafletMarker } from "leaflet";
 
 interface FieldBoundaryMapProps {
-  coordinates: number[][]; // GeoJSON [lon, lat]
+  coordinates: number[][];
   centroid?: { latitude: number; longitude: number };
   fieldName?: string;
 }
 
 type LayerMode = "modis_truecolor" | "modis_bands721" | "osm";
+
+const OSM_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+function getLayerUrl(mode: LayerMode) {
+  if (mode === "osm") return null;
+  const layer = mode === "modis_bands721"
+    ? "MODIS_Terra_CorrectedReflectance_Bands721"
+    : "MODIS_Terra_CorrectedReflectance_TrueColor";
+  return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+}
+
+function validRing(points: number[][]) {
+  return points.length >= 4 && points.every(
+    (point) => Array.isArray(point) && point.length >= 2 &&
+      Number.isFinite(point[0]) && Number.isFinite(point[1]) &&
+      point[0] >= -180 && point[0] <= 180 && point[1] >= -90 && point[1] <= 90
+  );
+}
 
 export default function FieldBoundaryMap({
   coordinates,
@@ -19,219 +37,205 @@ export default function FieldBoundaryMap({
 }: FieldBoundaryMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
-  const geoJsonLayerRef = useRef<LeafletGeoJSON | null>(null);
-  const currentTileRef = useRef<LeafletTileLayer | null>(null);
-
+  const polygonRef = useRef<LeafletGeoJSON | null>(null);
+  const baseRef = useRef<LeafletTileLayer | null>(null);
+  const imageryRef = useRef<LeafletTileLayer | null>(null);
+  const markerRef = useRef<LeafletMarker | null>(null);
   const [activeLayer, setActiveLayer] = useState<LayerMode>("modis_bands721");
+  const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [imageryError, setImageryError] = useState(false);
 
+  // Create the Leaflet map once. Keep a full-opacity OSM base underneath NASA
+  // imagery so the viewport remains useful when a satellite tile is unavailable.
   useEffect(() => {
-    let isCancelled = false;
-    const domNode = containerRef.current;
-    if (!domNode || typeof window === "undefined") return;
+    let cancelled = false;
+    let resizeObserver: ResizeObserver | undefined;
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    let resizeHandler: (() => void) | undefined;
+    const node = containerRef.current;
+    if (!node) return;
 
-    // Clean any existing Leaflet instances
-    if (mapRef.current) {
-      try { mapRef.current.remove(); } catch { /* ignore */ }
-      mapRef.current = null;
-    }
-    if ((domNode as unknown as { _leaflet_id?: unknown })._leaflet_id) {
-      delete (domNode as unknown as { _leaflet_id?: unknown })._leaflet_id;
-    }
-
-    import("leaflet").then((L) => {
-      import("leaflet/dist/leaflet.css" as never);
-      if (isCancelled || !containerRef.current) return;
-
-      if ((containerRef.current as unknown as { _leaflet_id?: unknown })._leaflet_id) {
-        delete (containerRef.current as unknown as { _leaflet_id?: unknown })._leaflet_id;
-      }
-
-      // Initial center from centroid or first coordinate
-      const centerLat = centroid ? centroid.latitude : coordinates[0]?.[1] ?? 38.34;
-      const centerLon = centroid ? centroid.longitude : coordinates[0]?.[0] ?? -98.12;
+    void import("leaflet").then((L) => {
+      if (cancelled || !containerRef.current) return;
 
       const map = L.map(containerRef.current, {
-        center: [centerLat, centerLon],
-        zoom: 13,
-        zoomControl: true,
+        center: [20, 0],
+        zoom: 2,
+        minZoom: 2,
+        maxZoom: 18,
+        zoomControl: false,
+        preferCanvas: true,
       });
-
-      // Underlay OSM
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap contributors",
-        opacity: 0.35,
-        maxZoom: 18,
-      }).addTo(map);
-
-      // Add NASA GIBS or OSM layer
-      const getLayerUrl = (mode: LayerMode) => {
-        if (mode === "osm") return "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-        if (mode === "modis_bands721") {
-          return "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_Bands721/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg";
-        }
-        return "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg";
-      };
-
-      const satLayer = L.tileLayer(getLayerUrl(activeLayer), {
-        attribution: "NASA GIBS / Terra",
-        opacity: 0.95,
-        maxZoom: 18,
-        maxNativeZoom: activeLayer === "osm" ? 18 : 9,
-      }).addTo(map);
-      currentTileRef.current = satLayer;
-
-      // Convert GeoJSON coordinates [lon, lat] to Leaflet GeoJSON feature
-      const geoJsonData: GeoJSON.Feature<GeoJSON.Polygon> = {
-        type: "Feature",
-        properties: { name: fieldName },
-        geometry: {
-          type: "Polygon",
-          coordinates: [coordinates],
-        },
-      };
-
-      const polyLayer = L.geoJSON(geoJsonData, {
-        style: {
-          color: "#22c55e",
-          weight: 3,
-          fillColor: "#86efac",
-          fillOpacity: 0.35,
-          dashArray: "4 4",
-        },
-      }).addTo(map);
-      geoJsonLayerRef.current = polyLayer;
-
-      // Fit bounds to polygon
-      try {
-        const bounds = polyLayer.getBounds();
-        if (bounds.isValid()) {
-          map.fitBounds(bounds, { padding: [40, 40] });
-        }
-      } catch {
-        // ignore
-      }
-
-      // Add Centroid pin if available
-      if (centroid) {
-        const centroidHtml = `
-          <div style="position: relative; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;">
-            <div style="position: absolute; width: 28px; height: 28px; border-radius: 50%; background: rgba(34, 197, 94, 0.4); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-            <div style="position: relative; width: 12px; height: 12px; border-radius: 50%; background: #16a34a; border: 2px solid #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.4);"></div>
-          </div>
-        `;
-        const centroidIcon = L.divIcon({
-          className: "centroid-pin",
-          html: centroidHtml,
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-        });
-        L.marker([centroid.latitude, centroid.longitude], { icon: centroidIcon })
-          .addTo(map)
-          .bindPopup(`<b>Centroid: ${fieldName}</b><br/>${centroid.latitude.toFixed(4)}°, ${centroid.longitude.toFixed(4)}°`);
-      }
-
       mapRef.current = map;
+      L.control.zoom({ position: "topright" }).addTo(map);
+
+      const base = L.tileLayer(OSM_URL, {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        subdomains: ["a", "b", "c"],
+        maxZoom: 19,
+        opacity: 1,
+      }).addTo(map);
+      baseRef.current = base;
+      base.on("tileerror", () => setMapError("The base map tiles could not be loaded. Check your connection or try again."));
+
+      setMapReady(true);
+      requestAnimationFrame(() => map.invalidateSize());
+      resizeObserver = new ResizeObserver(() => map.invalidateSize());
+      resizeObserver.observe(node);
+      resizeHandler = () => map.invalidateSize();
+      window.addEventListener("resize", resizeHandler);
+      resizeTimer = setTimeout(() => map.invalidateSize(), 300);
+    }).catch((error: unknown) => {
+      if (!cancelled) {
+        setMapError(error instanceof Error ? error.message : "The interactive map could not be initialized.");
+      }
     });
 
     return () => {
-      isCancelled = true;
+      cancelled = true;
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeObserver?.disconnect();
+      if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       if (mapRef.current) {
-        try { mapRef.current.remove(); } catch { /* ignore */ }
+        mapRef.current.remove();
         mapRef.current = null;
       }
-      if (domNode && (domNode as unknown as { _leaflet_id?: unknown })._leaflet_id) {
-        delete (domNode as unknown as { _leaflet_id?: unknown })._leaflet_id;
-      }
+      polygonRef.current = null;
+      imageryRef.current = null;
+      markerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coordinates, centroid, fieldName]);
+  }, []);
 
-  // Handle layer toggle
-  const handleLayerSwitch = (mode: LayerMode) => {
-    setActiveLayer(mode);
-    if (!mapRef.current) return;
-    import("leaflet").then((L) => {
-      if (currentTileRef.current && mapRef.current) {
-        mapRef.current.removeLayer(currentTileRef.current);
+  // Draw/update the polygon independently of map creation and layer changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    void import("leaflet").then((L) => {
+      if (mapRef.current !== map) return;
+      if (polygonRef.current) map.removeLayer(polygonRef.current);
+      if (markerRef.current) map.removeLayer(markerRef.current);
+      polygonRef.current = null;
+      markerRef.current = null;
+
+      if (!validRing(coordinates)) {
+        setMapError("The GeoJSON polygon is invalid. Provide at least four valid [longitude, latitude] coordinate pairs.");
+        return;
       }
-      const getLayerUrl = (m: LayerMode) => {
-        if (m === "osm") return "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-        if (m === "modis_bands721") {
-          return "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_Bands721/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg";
-        }
-        return "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg";
+      setMapError(null);
+      const closedRing = coordinates[0][0] === coordinates[coordinates.length - 1][0] &&
+        coordinates[0][1] === coordinates[coordinates.length - 1][1]
+        ? coordinates
+        : [...coordinates, coordinates[0]];
+      const feature: GeoJSON.Feature<GeoJSON.Polygon> = {
+        type: "Feature",
+        properties: { name: fieldName },
+        geometry: { type: "Polygon", coordinates: [closedRing] },
       };
-      const newLayer = L.tileLayer(getLayerUrl(mode), {
-        attribution: "NASA GIBS / Terra",
-        opacity: 0.95,
-        maxZoom: 18,
-        maxNativeZoom: mode === "osm" ? 18 : 9,
-      });
-      if (mapRef.current) {
-        newLayer.addTo(mapRef.current);
-        currentTileRef.current = newLayer;
+      const polygon = L.geoJSON(feature, {
+        style: { color: "#047857", weight: 3, opacity: 1, fillColor: "#34d399", fillOpacity: 0.28 },
+      }).addTo(map);
+      polygonRef.current = polygon;
+      const bounds = polygon.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
       }
-    });
-  };
+      if (centroid && Number.isFinite(centroid.latitude) && Number.isFinite(centroid.longitude)) {
+        const marker = L.marker([centroid.latitude, centroid.longitude]).addTo(map);
+        const popup = document.createElement("div");
+        popup.textContent = `${fieldName} centroid · ${centroid.latitude.toFixed(4)}, ${centroid.longitude.toFixed(4)}`;
+        marker.bindPopup(popup);
+        markerRef.current = marker;
+      }
+      requestAnimationFrame(() => map.invalidateSize());
+    }).catch(() => setMapError("The parcel boundary could not be drawn."));
+  }, [coordinates, centroid, fieldName, mapReady]);
+
+  // Swap only the satellite overlay. The OSM base layer stays visible underneath.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    void import("leaflet").then((L) => {
+      if (mapRef.current !== map) return;
+      if (imageryRef.current) {
+        map.removeLayer(imageryRef.current);
+        imageryRef.current = null;
+      }
+      setImageryError(false);
+      const url = getLayerUrl(activeLayer);
+      if (!url) return;
+      const imagery = L.tileLayer(url, {
+        attribution: "NASA GIBS / Terra",
+        maxZoom: 18,
+        maxNativeZoom: 9,
+        opacity: 0.72,
+        updateWhenIdle: true,
+      });
+      imagery.on("tileerror", () => setImageryError(true));
+      imagery.addTo(map);
+      imageryRef.current = imagery;
+    }).catch(() => setImageryError(true));
+  }, [activeLayer, mapReady]);
 
   const zoomToFit = () => {
-    if (mapRef.current && geoJsonLayerRef.current) {
-      const bounds = geoJsonLayerRef.current.getBounds();
-      if (bounds.isValid()) {
-        mapRef.current.fitBounds(bounds, { padding: [40, 40], duration: 0.8 });
-      }
-    }
+    const map = mapRef.current;
+    const bounds = polygonRef.current?.getBounds();
+    if (map && bounds?.isValid()) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 16 });
+  };
+
+  const retryMap = () => {
+    setMapError(null);
+    if (mapRef.current) mapRef.current.invalidateSize();
   };
 
   return (
-    <div className="relative rounded-3xl overflow-hidden border border-[#d2e4d0] shadow-md bg-[#0f1f14]">
-      {/* Top Map HUD */}
-      <div className="absolute top-3 left-3 right-3 z-[400] flex items-center justify-between pointer-events-none">
-        <div className="pointer-events-auto bg-slate-900/85 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10 text-xs text-white flex items-center gap-2">
-          <MapPin className="h-4 w-4 text-[#86efac]" />
-          <span className="font-bold">{fieldName}</span>
-          <span className="text-[10px] text-gray-400 font-mono">({coordinates.length} vertices)</span>
+    <section className="relative isolate overflow-hidden rounded-2xl border border-slate-300 bg-slate-100 shadow-lg">
+      <div className="absolute left-3 right-3 top-3 z-[1000] flex flex-wrap items-start justify-between gap-2 pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-xl border border-slate-700/70 bg-slate-950/90 px-3 py-2 text-xs text-white shadow-lg backdrop-blur">
+          <MapPin className="h-4 w-4 text-emerald-400" />
+          <span className="max-w-[220px] truncate font-semibold">{fieldName}</span>
+          <span className="text-[10px] text-slate-300">{coordinates.length} vertices</span>
         </div>
-
-        <div className="pointer-events-auto flex items-center gap-2">
-          <button
-            onClick={zoomToFit}
-            title="Zoom to Fit Field"
-            className="p-2 bg-slate-900/85 hover:bg-slate-900 text-white rounded-xl border border-white/10 shadow-sm transition"
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
+        <div className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-xl border border-slate-700/70 bg-slate-950/90 p-1 shadow-lg backdrop-blur">
+          {([
+            ["modis_bands721", "Agro bands"],
+            ["modis_truecolor", "True colour"],
+            ["osm", "Street map"],
+          ] as const).map(([mode, label]) => (
+            <button key={mode} type="button" onClick={() => setActiveLayer(mode)}
+              aria-pressed={activeLayer === mode}
+              className={`rounded-lg px-3 py-2 text-[11px] font-semibold transition ${activeLayer === mode ? "bg-emerald-600 text-white" : "text-slate-200 hover:bg-white/10"}`}>
+              {label}
+            </button>
+          ))}
+          <button type="button" onClick={zoomToFit} title="Zoom to parcel" aria-label="Zoom to parcel"
+            className="rounded-lg p-2 text-white hover:bg-white/10">
+            <Maximize2 className="h-4 w-4" />
           </button>
-
-          <div className="flex bg-slate-900/85 backdrop-blur-md p-1 rounded-xl border border-white/10 text-xs">
-            <button
-              onClick={() => handleLayerSwitch("modis_bands721")}
-              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
-                activeLayer === "modis_bands721" ? "bg-[#2d7a3a] text-white" : "text-gray-300 hover:text-white"
-              }`}
-            >
-              Agro Bands 7-2-1
-            </button>
-            <button
-              onClick={() => handleLayerSwitch("modis_truecolor")}
-              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
-                activeLayer === "modis_truecolor" ? "bg-[#2d7a3a] text-white" : "text-gray-300 hover:text-white"
-              }`}
-            >
-              TrueColor
-            </button>
-            <button
-              onClick={() => handleLayerSwitch("osm")}
-              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition ${
-                activeLayer === "osm" ? "bg-[#2d7a3a] text-white" : "text-gray-300 hover:text-white"
-              }`}
-            >
-              Carto
-            </button>
-          </div>
         </div>
       </div>
 
-      <div ref={containerRef} className="w-full h-[360px] sm:h-[440px] z-0" />
-    </div>
+      <div ref={containerRef} className="relative z-0 h-[460px] min-h-[360px] w-full bg-slate-200 sm:h-[520px]" />
+
+      {!mapReady && !mapError && (
+        <div className="absolute inset-0 z-[500] flex items-center justify-center bg-slate-100/95 text-sm font-medium text-slate-700">
+          Initialising interactive parcel map…
+        </div>
+      )}
+      {mapError && (
+        <div role="alert" className="absolute bottom-3 left-3 right-3 z-[1000] flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 shadow-lg">
+          <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" />{mapError}</span>
+          <button type="button" onClick={retryMap} className="inline-flex shrink-0 items-center gap-1 font-semibold"><RefreshCw className="h-3.5 w-3.5" />Retry</button>
+        </div>
+      )}
+      {imageryError && (
+        <div className="absolute bottom-3 right-3 z-[900] rounded-lg border border-amber-300 bg-amber-50/95 px-3 py-2 text-[11px] font-medium text-amber-900 shadow">
+          NASA imagery unavailable for this view; street basemap remains active.
+        </div>
+      )}
+      <div className="pointer-events-none absolute bottom-2 left-3 z-[800] rounded-md bg-slate-950/80 px-2 py-1 text-[10px] text-white">
+        NASA GIBS imagery · OpenStreetMap basemap · WGS-84
+      </div>
+    </section>
   );
 }
