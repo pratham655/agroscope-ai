@@ -11,6 +11,7 @@ Scientific disclaimer: These are hypothetical scenarios, NOT climate forecasts.
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 from datetime import date, timedelta
+import asyncio
 import logging
 import math
 import httpx
@@ -27,6 +28,14 @@ from app.services.science import (
     score_crop_rotation,
     compute_ndvi_anomaly,
     linear_trend,
+)
+from app.api.location import (
+    _fetch_nominatim_search,
+    _fetch_nominatim_reverse,
+    _match_gazetteer,
+    _format_coord_label,
+    _COORD_REGEX,
+    GLOBAL_GAZETTEER,
 )
 
 logger = logging.getLogger(__name__)
@@ -336,84 +345,73 @@ async def geocode_location(
     Search locations globally for the Farm Futures Lab.
     Queries OpenStreetMap Nominatim with safe fallback to the built-in
     global agricultural gazetteer.
+    Guarantees:
+      - Always returns a response within <= 2.0s.
+      - Never hangs or leaves requests pending.
+      - Never substitutes Punjab or unrelated benchmark coordinates when lookup fails.
     """
     clean_q = query.strip()
     results = []
     seen_coords = set()
 
-    # 1. Search built-in agricultural gazetteer first for instant exact/partial matches
-    tokens = [t.lower() for t in re.split(r"[\s,]+", clean_q) if len(t) >= 2]
-    for loc in GLOBAL_AG_GAZETTEER:
-        haystack = f"{loc['label']} {loc['name']} {loc['region']} {loc['country']} {loc['type']}".lower()
-        if any(token in haystack for token in tokens):
-            coord_key = (round(loc["latitude"], 3), round(loc["longitude"], 3))
+    # 1. Search built-in agricultural gazetteer for instant resilience
+    gaz_matches = _match_gazetteer(clean_q)
+    for g in gaz_matches:
+        coord_key = (round(g["latitude"], 3), round(g["longitude"], 3))
+        if coord_key not in seen_coords:
+            seen_coords.add(coord_key)
+            results.append({
+                "label": g["label"],
+                "name": g["name"],
+                "latitude": g["latitude"],
+                "longitude": g["longitude"],
+                "type": g["type"],
+                "country": g["country"],
+                "source": g["source"],
+            })
+
+    # 2. Query Nominatim with bounded connect/total timeout
+    nom_data = await _fetch_nominatim_search(clean_q, limit=6)
+    for item in nom_data:
+        try:
+            if not isinstance(item, dict):
+                continue
+            lat_f = round(float(item["lat"]), 4)
+            lon_f = round(float(item["lon"]), 4)
+            coord_key = (round(lat_f, 3), round(lon_f, 3))
             if coord_key not in seen_coords:
                 seen_coords.add(coord_key)
+                disp_name = item.get("display_name", "")
+                addr = item.get("address", {})
+                place_name = (
+                    addr.get("village")
+                    or addr.get("town")
+                    or addr.get("city")
+                    or addr.get("county")
+                    or addr.get("state_district")
+                    or item.get("name")
+                    or clean_q
+                )
+                country = addr.get("country", "")
+                state = addr.get("state", "")
+                label_parts = [place_name]
+                if state and state != place_name:
+                    label_parts.append(state)
+                if country and country != state:
+                    label_parts.append(country)
+                label = ", ".join(label_parts) if label_parts else disp_name
+
                 results.append({
-                    "label": loc["label"],
-                    "name": loc["name"],
-                    "latitude": loc["latitude"],
-                    "longitude": loc["longitude"],
-                    "type": loc["type"],
-                    "country": loc["country"],
-                    "source": "NASA Agricultural Gazetteer",
+                    "label": label,
+                    "name": place_name,
+                    "latitude": lat_f,
+                    "longitude": lon_f,
+                    "type": item.get("type", "Location").replace("_", " ").title(),
+                    "country": country or "Global",
+                    "source": "OpenStreetMap",
                 })
-
-    # 2. Query Nominatim for villages, districts, cities, and administrative regions
-    try:
-        timeout_cfg = httpx.Timeout(2.5, connect=1.2)
-        async with httpx.AsyncClient(timeout=timeout_cfg) as client:
-            resp = await client.get(
-                "https://nominatim.openstreetmap.org/search",
-                params={"q": clean_q, "format": "json", "addressdetails": 1, "limit": 6},
-                headers={
-                    "User-Agent": "AGROSCOPE-AI/1.0 (NASA Space Apps Challenge 2026; Agricultural Earth Intelligence; mailto:agroscope-ai@nasa.gov)",
-                    "Accept-Language": "en",
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                for item in data:
-                    try:
-                        lat_f = round(float(item["lat"]), 4)
-                        lon_f = round(float(item["lon"]), 4)
-                        coord_key = (round(lat_f, 3), round(lon_f, 3))
-                        if coord_key not in seen_coords:
-                            seen_coords.add(coord_key)
-                            # Build human-friendly label
-                            disp_name = item.get("display_name", "")
-                            addr = item.get("address", {})
-                            place_name = (
-                                addr.get("village")
-                                or addr.get("town")
-                                or addr.get("city")
-                                or addr.get("county")
-                                or addr.get("state_district")
-                                or item.get("name")
-                                or clean_q
-                            )
-                            country = addr.get("country", "")
-                            state = addr.get("state", "")
-                            label_parts = [place_name]
-                            if state and state != place_name:
-                                label_parts.append(state)
-                            if country and country != state:
-                                label_parts.append(country)
-                            label = ", ".join(label_parts) if label_parts else disp_name
-
-                            results.append({
-                                "label": label,
-                                "name": place_name,
-                                "latitude": lat_f,
-                                "longitude": lon_f,
-                                "type": item.get("type", "Location").replace("_", " ").title(),
-                                "country": country or "Global",
-                                "source": "OpenStreetMap",
-                            })
-                    except (ValueError, KeyError):
-                        continue
-    except Exception as exc:
-        logger.warning(f"Nominatim geocoding failed: {exc}; using gazetteer results.")
+        except (ValueError, KeyError, TypeError):
+            continue
 
     return {"query": clean_q, "count": len(results), "results": results[:10]}
 
@@ -428,6 +426,7 @@ async def reverse_geocode_location(
     """
     Reverse geocodes latitude/longitude coordinates to an administrative name.
     Accepts latitude/longitude or lat/lon query params.
+    Guarantees response within <= 2.0s without hanging.
     """
     final_lat = latitude if latitude is not None else lat
     final_lon = longitude if longitude is not None else lon
@@ -437,72 +436,58 @@ async def reverse_geocode_location(
     lat_r = round(final_lat, 4)
     lon_r = round(final_lon, 4)
 
-    # 1. Attempt reverse lookup via Nominatim
-    try:
-        timeout_cfg = httpx.Timeout(2.5, connect=1.2)
-        async with httpx.AsyncClient(timeout=timeout_cfg) as client:
-            resp = await client.get(
-                "https://nominatim.openstreetmap.org/reverse",
-                params={"lat": lat_r, "lon": lon_r, "format": "json", "addressdetails": 1},
-                headers={
-                    "User-Agent": "AGROSCOPE-AI/1.0 (NASA Space Apps Challenge 2026; Agricultural Earth Intelligence; mailto:agroscope-ai@nasa.gov)",
-                    "Accept-Language": "en",
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                addr = data.get("address", {})
-                place = (
-                    addr.get("village")
-                    or addr.get("town")
-                    or addr.get("city")
-                    or addr.get("county")
-                    or addr.get("state_district")
-                    or addr.get("suburb")
-                )
-                state = addr.get("state", "")
-                country = addr.get("country", "")
-                parts = [p for p in [place, state, country] if p]
-                label = ", ".join(parts) if parts else data.get("display_name", f"Coordinates {lat_r}°, {lon_r}°")
-                return {
-                    "latitude": lat_r,
-                    "longitude": lon_r,
-                    "label": label,
-                    "place": place or "Agricultural Parcel",
-                    "state": state,
-                    "country": country,
-                    "source": "OpenStreetMap",
-                }
-    except Exception as exc:
-        logger.warning(f"Reverse geocode lookup exception: {exc}")
+    # 1. Attempt reverse lookup via Nominatim with bounded timeout
+    nom_data = await _fetch_nominatim_reverse(lat_r, lon_r)
+    if nom_data and isinstance(nom_data, dict) and ("address" in nom_data or "display_name" in nom_data):
+        addr = nom_data.get("address", {}) if isinstance(nom_data.get("address"), dict) else {}
+        place = (
+            addr.get("village")
+            or addr.get("town")
+            or addr.get("city")
+            or addr.get("county")
+            or addr.get("state_district")
+            or addr.get("suburb")
+        )
+        state = addr.get("state", "")
+        country = addr.get("country", "")
+        parts = [p for p in [place, state, country] if p]
+        label = ", ".join(parts) if parts else (nom_data.get("display_name") or f"Coordinates {lat_r}°, {lon_r}°")
+        return {
+            "latitude": lat_r,
+            "longitude": lon_r,
+            "label": label,
+            "place": place or "Agricultural Parcel",
+            "state": state,
+            "country": country,
+            "source": "OpenStreetMap",
+        }
 
-    # 2. Fallback to nearest gazetteer point if within 1.5 degrees (~160 km)
+    # 2. Fallback to nearest gazetteer point if within 0.25 degrees (~25 km)
     best_loc = None
     min_dist = float("inf")
-    for loc in GLOBAL_AG_GAZETTEER:
+    for loc in GLOBAL_GAZETTEER:
         d = math.hypot(loc["latitude"] - lat_r, loc["longitude"] - lon_r)
         if d < min_dist:
             min_dist = d
             best_loc = loc
 
-    if best_loc and min_dist < 1.5:
+    if best_loc and min_dist < 0.25:
         return {
             "latitude": lat_r,
             "longitude": lon_r,
             "label": f"Near {best_loc['label']}",
             "place": best_loc["name"],
-            "state": best_loc["region"],
+            "state": best_loc.get("region", ""),
             "country": best_loc["country"],
             "source": "NASA Agricultural Gazetteer",
         }
 
     # 3. Coordinate label
-    lat_dir = "N" if lat_r >= 0 else "S"
-    lon_dir = "E" if lon_r >= 0 else "W"
+    label = _format_coord_label(lat_r, lon_r)
     return {
         "latitude": lat_r,
         "longitude": lon_r,
-        "label": f"Agricultural Coordinates {abs(lat_r):.4f}°{lat_dir}, {abs(lon_r):.4f}°{lon_dir}",
+        "label": label,
         "place": "Custom Field Location",
         "state": "Custom Region",
         "country": "International Terrestrial Surface",
