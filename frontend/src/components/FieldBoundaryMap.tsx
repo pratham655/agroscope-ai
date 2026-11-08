@@ -52,6 +52,7 @@ export default function FieldBoundaryMap({
     let cancelled = false;
     let resizeObserver: ResizeObserver | undefined;
     let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+    let resizeHandler: (() => void) | undefined;
     const node = containerRef.current;
     if (!node) return;
 
@@ -82,8 +83,8 @@ export default function FieldBoundaryMap({
       requestAnimationFrame(() => map.invalidateSize());
       resizeObserver = new ResizeObserver(() => map.invalidateSize());
       resizeObserver.observe(node);
-      window.addEventListener("resize", onResize);
-      function onResize() { map.invalidateSize(); }
+      resizeHandler = () => map.invalidateSize();
+      window.addEventListener("resize", resizeHandler);
       resizeTimer = setTimeout(() => map.invalidateSize(), 300);
     }).catch((error: unknown) => {
       if (!cancelled) {
@@ -95,7 +96,7 @@ export default function FieldBoundaryMap({
       cancelled = true;
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver?.disconnect();
-      window.removeEventListener("resize", () => undefined);
+      if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
