@@ -441,6 +441,7 @@ def _normalize_text(text: str) -> str:
 # Serialize calls in-process and cache successful responses to protect the service.
 _NOMINATIM_MIN_INTERVAL_S = 1.05
 _NOMINATIM_CACHE_TTL_S = 300
+_NOMINATIM_TOTAL_TIMEOUT_S = 7.0
 _nominatim_gate = threading.Lock()
 _nominatim_last_request_at = 0.0
 _nominatim_cache: Dict[tuple, tuple] = {}
@@ -549,7 +550,7 @@ async def _fetch_nominatim_search(query: str, limit: int = 7) -> List[Dict[str, 
             return data if isinstance(data, list) else []
 
     try:
-        data = await asyncio.wait_for(_do_search(), timeout=7.0)
+        data = await asyncio.wait_for(_do_search(), timeout=_NOMINATIM_TOTAL_TIMEOUT_S)
         _cache_set(cache_key, data)
         return [dict(item) for item in data if isinstance(item, dict)]
     except (asyncio.TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
@@ -586,7 +587,7 @@ async def _fetch_nominatim_reverse(lat: float, lon: float) -> Optional[Dict[str,
             return data if isinstance(data, dict) else None
 
     try:
-        data = await asyncio.wait_for(_do_reverse(), timeout=7.0)
+        data = await asyncio.wait_for(_do_reverse(), timeout=_NOMINATIM_TOTAL_TIMEOUT_S)
         if data is not None:
             _cache_set(cache_key, data)
             return dict(data)
@@ -748,7 +749,27 @@ async def reverse_geocode_location(
     lat_r = round(final_lat, 4)
     lon_r = round(final_lon, 4)
 
-    # 1. Attempt lookup via Nominatim with bounded timeout
+    # 1. Resolve coordinates near a curated point locally before using a public service.
+    best_loc = None
+    min_dist = float("inf")
+    for loc in GLOBAL_GAZETTEER:
+        distance = math.hypot(loc["latitude"] - lat_r, loc["longitude"] - lon_r)
+        if distance < min_dist:
+            min_dist = distance
+            best_loc = loc
+
+    if best_loc and min_dist < 0.25:
+        return {
+            "latitude": lat_r,
+            "longitude": lon_r,
+            "label": best_loc["label"],
+            "place": best_loc["name"],
+            "state": best_loc.get("region", ""),
+            "country": best_loc["country"],
+            "source": "Global Gazetteer",
+        }
+
+    # 2. Only unresolved coordinates require a public reverse-geocoding request.
     nom_data = await _fetch_nominatim_reverse(lat_r, lon_r)
     if nom_data and isinstance(nom_data, dict) and ("address" in nom_data or "display_name" in nom_data):
         addr = nom_data.get("address", {}) if isinstance(nom_data.get("address"), dict) else {}
@@ -773,26 +794,6 @@ async def reverse_geocode_location(
             "state": state,
             "country": country or "Global",
             "source": "OpenStreetMap",
-        }
-
-    # 2. Check if coordinates are near a known gazetteer point within 0.25 deg (~25 km)
-    best_loc = None
-    min_dist = float("inf")
-    for g in GLOBAL_GAZETTEER:
-        dist = math.hypot(g["latitude"] - lat_r, g["longitude"] - lon_r)
-        if dist < min_dist:
-            min_dist = dist
-            best_loc = g
-
-    if best_loc and min_dist < 0.25:
-        return {
-            "latitude": lat_r,
-            "longitude": lon_r,
-            "label": best_loc["label"],
-            "place": best_loc["name"],
-            "state": best_loc.get("region", ""),
-            "country": best_loc["country"],
-            "source": "Global Gazetteer",
         }
 
     # 3. Clean coordinate-based label without benchmark substitution
