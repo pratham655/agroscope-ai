@@ -10,6 +10,7 @@ from app.services.nasa_power import fetch_daily_power
 from app.services.science import (
     calculate_spi, analyze_soil_moisture, linear_trend,
     score_crop_rotation, cumulative_gdd, analyze_heat_stress,
+    analyze_atmospheric_dryness,
 )
 
 router = APIRouter()
@@ -119,6 +120,7 @@ async def get_recommendations(
     gwtroot= vals("GWETROOT")
     t2m_max= vals("T2M_MAX")
     t2m_min= vals("T2M_MIN")
+    rh2m   = vals("RH2M")
 
     # ── Indicators ─────────────────────────────────────────────────────────────
     spi3 = calculate_spi(precip, timescale=3) if len(precip) >= 3 else []
@@ -133,6 +135,7 @@ async def get_recommendations(
     t_anomaly = t_recent - t_mean
 
     heat_anal = analyze_heat_stress(t2m_max, t2m)
+    vpd_anal  = analyze_atmospheric_dryness(t2m, rh2m)
 
     gdd_cum_vals = cumulative_gdd(t2m_max, t2m_min) if t2m_max and t2m_min else []
     total_gdd    = gdd_cum_vals[-1] if gdd_cum_vals else 0.0
@@ -177,6 +180,15 @@ async def get_recommendations(
     elif heat_anal.get("status") == "insufficient_data":
         evidence.append("Heat stress assessment: Insufficient data to assess heat stress.")
 
+    # Atmospheric dryness / VPD: evaluated independently of root-zone soil moisture
+    if vpd_anal.get("status") == "evaluated" and vpd_anal.get("is_elevated_demand"):
+        evidence.append(
+            f"Atmospheric dryness signal: {vpd_anal.get('assessment')} "
+            f"(decoupled from root-zone soil moisture)."
+        )
+    elif vpd_anal.get("status") == "insufficient_data":
+        evidence.append("Atmospheric dryness (VPD): Insufficient data to assess atmospheric dryness (VPD).")
+
     # Precipitation variability
     if p_trend.get("significant"):
         active_strategies.append(ADAPTATION_STRATEGIES["precipitation_variability"])
@@ -216,6 +228,10 @@ async def get_recommendations(
         "heat_stress_status":   heat_anal.get("status"),
         "heat_stress_days_35c": heat_anal.get("heat_stress_days_35c"),
         "max_tmax_c":           heat_anal.get("max_tmax_c"),
+        "mean_vpd_kpa":         vpd_anal.get("mean_vpd_kpa"),
+        "max_vpd_kpa":          vpd_anal.get("max_vpd_kpa"),
+        "vpd_assessment":       vpd_anal.get("assessment"),
+        "vpd_status":           vpd_anal.get("status"),
     }
 
     return {

@@ -18,6 +18,7 @@ Covers:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,7 +29,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import openrouter as or_service
 
-client = TestClient(app)
+def get_client() -> TestClient:
+    return TestClient(app)
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -78,25 +80,22 @@ class TestOpenRouterService:
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             assert or_service.is_configured() is True
 
-    @pytest.mark.asyncio
-    async def test_raises_key_missing_when_unconfigured(self):
+    def test_raises_key_missing_when_unconfigured(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
             with pytest.raises(or_service.OpenRouterKeyMissingError):
-                await or_service.openrouter_chat("hello")
+                asyncio.run(or_service.openrouter_chat("hello"))
 
-    @pytest.mark.asyncio
-    async def test_successful_response(self):
+    def test_successful_response(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client.post = AsyncMock(return_value=_mock_or_response(_GOOD_REPLY))
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
-                result = await or_service.openrouter_chat("What crop should I plant?", _SAMPLE_CTX)
+                result = asyncio.run(or_service.openrouter_chat("What crop should I plant?", _SAMPLE_CTX))
         assert result == _GOOD_REPLY
 
-    @pytest.mark.asyncio
-    async def test_timeout_raises_unavailable(self):
+    def test_timeout_raises_unavailable(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -104,10 +103,9 @@ class TestOpenRouterService:
             mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("timed out"))
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
                 with pytest.raises(or_service.OpenRouterUnavailableError, match="timed out"):
-                    await or_service.openrouter_chat("hello")
+                    asyncio.run(or_service.openrouter_chat("hello"))
 
-    @pytest.mark.asyncio
-    async def test_http_401_raises_unavailable(self):
+    def test_http_401_raises_unavailable(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -115,10 +113,9 @@ class TestOpenRouterService:
             mock_client.post = AsyncMock(return_value=httpx.Response(401, text="Unauthorized"))
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
                 with pytest.raises(or_service.OpenRouterUnavailableError, match="401"):
-                    await or_service.openrouter_chat("hello")
+                    asyncio.run(or_service.openrouter_chat("hello"))
 
-    @pytest.mark.asyncio
-    async def test_http_402_raises_unavailable(self):
+    def test_http_402_raises_unavailable(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -126,10 +123,9 @@ class TestOpenRouterService:
             mock_client.post = AsyncMock(return_value=httpx.Response(402, text="Payment Required"))
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
                 with pytest.raises(or_service.OpenRouterUnavailableError, match="402"):
-                    await or_service.openrouter_chat("hello")
+                    asyncio.run(or_service.openrouter_chat("hello"))
 
-    @pytest.mark.asyncio
-    async def test_http_429_raises_unavailable(self):
+    def test_http_429_raises_unavailable(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -137,10 +133,9 @@ class TestOpenRouterService:
             mock_client.post = AsyncMock(return_value=httpx.Response(429, text="Too Many Requests"))
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
                 with pytest.raises(or_service.OpenRouterUnavailableError, match="429"):
-                    await or_service.openrouter_chat("hello")
+                    asyncio.run(or_service.openrouter_chat("hello"))
 
-    @pytest.mark.asyncio
-    async def test_non_2xx_raises_unavailable(self):
+    def test_non_2xx_raises_unavailable(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             mock_client = AsyncMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -148,10 +143,9 @@ class TestOpenRouterService:
             mock_client.post = AsyncMock(return_value=httpx.Response(503, text="Service Unavailable"))
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
                 with pytest.raises(or_service.OpenRouterUnavailableError, match="503"):
-                    await or_service.openrouter_chat("hello")
+                    asyncio.run(or_service.openrouter_chat("hello"))
 
-    @pytest.mark.asyncio
-    async def test_malformed_response_raises_unavailable(self):
+    def test_malformed_response_raises_unavailable(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
             bad_body = httpx.Response(200, json={"unexpected": "shape"})
             mock_client = AsyncMock()
@@ -160,10 +154,9 @@ class TestOpenRouterService:
             mock_client.post = AsyncMock(return_value=bad_body)
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
                 with pytest.raises(or_service.OpenRouterUnavailableError, match="Unexpected"):
-                    await or_service.openrouter_chat("hello")
+                    asyncio.run(or_service.openrouter_chat("hello"))
 
-    @pytest.mark.asyncio
-    async def test_api_key_redacted_from_reply(self):
+    def test_api_key_redacted_from_reply(self):
         """If the model somehow echoes the key, it must be stripped."""
         secret_key = "sk-or-secret-XYZ"
         leaky_reply = f"Here is your key: {secret_key}"
@@ -173,7 +166,7 @@ class TestOpenRouterService:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client.post = AsyncMock(return_value=_mock_or_response(leaky_reply))
             with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
-                result = await or_service.openrouter_chat("hello")
+                result = asyncio.run(or_service.openrouter_chat("hello"))
         assert secret_key not in result
         assert "redacted" in result.lower()
 
@@ -198,6 +191,26 @@ class TestOpenRouterService:
         assert "fraction of saturation, 0.0-1.0 scale" in block
         assert "NOT a standardized anomaly" in block
 
+    def test_context_block_vpd_formatting(self):
+        """VPD must be clearly labeled and decoupled from soil moisture in context block."""
+        ctx_with_vpd = dict(_SAMPLE_CTX)
+        ctx_with_vpd["environmental_context"] = dict(_SAMPLE_CTX["environmental_context"])
+        ctx_with_vpd["environmental_context"]["mean_vpd_kpa"] = 1.45
+        ctx_with_vpd["environmental_context"]["max_vpd_kpa"] = 2.10
+        ctx_with_vpd["environmental_context"]["vpd_assessment"] = "Elevated evaporative demand"
+        block = or_service._build_context_block(ctx_with_vpd)
+        assert "Mean vapor pressure deficit (VPD): 1.45 kPa" in block
+        assert "decoupled from soil moisture" in block
+
+    def test_context_block_missing_vpd_uncertainty(self):
+        """When VPD data is missing, an explicit uncertainty statement must appear."""
+        ctx_no_vpd = dict(_SAMPLE_CTX)
+        ctx_no_vpd["environmental_context"] = dict(_SAMPLE_CTX["environmental_context"])
+        ctx_no_vpd["environmental_context"].pop("mean_vpd_kpa", None)
+        ctx_no_vpd["environmental_context"].pop("vpd_assessment", None)
+        block = or_service._build_context_block(ctx_no_vpd)
+        assert "Insufficient data to assess atmospheric dryness (VPD) (RH2M missing)" in block
+
 
 # ---------------------------------------------------------------------------
 # API endpoint tests (via TestClient)
@@ -206,7 +219,7 @@ class TestCopilotStatusEndpoint:
 
     def test_status_no_key(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
-            resp = client.get("/api/copilot/status")
+            resp = get_client().get("/api/copilot/status")
         assert resp.status_code == 200
         data = resp.json()
         assert data["ai_powered"] is False
@@ -215,7 +228,7 @@ class TestCopilotStatusEndpoint:
 
     def test_status_with_key(self):
         with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
-            resp = client.get("/api/copilot/status")
+            resp = get_client().get("/api/copilot/status")
         assert resp.status_code == 200
         data = resp.json()
         assert data["ai_powered"] is True
@@ -228,7 +241,7 @@ class TestCopilotStatusEndpoint:
 class TestCopilotChatEndpoint:
 
     def _post(self, question: str, ctx=None, lat=30.73, lon=76.78, label="Punjab, India"):
-        return client.post(
+        return get_client().post(
             "/api/copilot/chat",
             json={
                 "question": question,
@@ -252,7 +265,7 @@ class TestCopilotChatEndpoint:
         assert resp.status_code == 422
 
     def test_fallback_when_no_key(self):
-        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+        with patch("app.api.copilot.openrouter_chat", side_effect=or_service.OpenRouterKeyMissingError()):
             resp = self._post("What crop should I plant?", _SAMPLE_CTX)
         assert resp.status_code == 200
         data = resp.json()
@@ -433,4 +446,78 @@ class TestCopilotChatEndpoint:
         reply = resp.json()["reply"]
         assert "Adequate root-zone soil moisture" in reply
         assert "not waterlogging" in reply.lower()
+
+    def test_vpd_query_handling_evaluated(self):
+        """When VPD data is evaluated, the fallback provides specific VPD values and decoupling notes."""
+        ctx_vpd = {
+            "location": {"latitude": 30.73, "longitude": 76.78, "label": "Punjab, India"},
+            "period": {"start": "2023-01-01", "end": "2023-12-31"},
+            "environmental_context": {
+                "mean_vpd_kpa": 1.65,
+                "vpd_assessment": "Elevated atmospheric evaporative demand: mean VPD is 1.65 kPa.",
+                "vpd_status": "evaluated",
+            },
+        }
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+            resp = self._post(
+                question="What is the atmospheric dryness and VPD?",
+                ctx=ctx_vpd,
+                lat=30.73,
+                lon=76.78,
+                label="Punjab, India",
+            )
+        assert resp.status_code == 200
+        reply = resp.json()["reply"]
+        assert "Atmospheric Dryness & Evaporative Demand" in reply
+        assert "1.65 kPa" in reply
+        assert "independently of root-zone soil moisture" in reply
+
+    def test_vpd_query_handling_missing_data(self):
+        """When VPD data is missing, an explicit uncertainty statement is returned."""
+        ctx_no_vpd = {
+            "location": {"latitude": 30.73, "longitude": 76.78, "label": "Punjab, India"},
+            "period": {"start": "2023-01-01", "end": "2023-12-31"},
+            "environmental_context": {
+                "vpd_status": "insufficient_data",
+            },
+        }
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+            resp = self._post(
+                question="What is the VPD for this location?",
+                ctx=ctx_no_vpd,
+                lat=30.73,
+                lon=76.78,
+                label="Punjab, India",
+            )
+        assert resp.status_code == 200
+        reply = resp.json()["reply"]
+        assert "Insufficient data to assess atmospheric dryness (VPD)" in reply
+
+
+class TestResponseSanitizer:
+    def test_sanitizer_removes_double_escapes_and_translates_variables(self):
+        from app.api.copilot import _validate_and_sanitize_response
+
+        raw_llm = r"The \*\*GWETROOT\*\* fraction is 0.68, and \*\*PRECTOTCORR\*\* was 15 mm."
+        clean = _validate_and_sanitize_response(raw_llm)
+        assert r"\*\*" not in clean
+        assert "**root-zone soil wetness fraction**" in clean
+        assert "**daily precipitation**" in clean
+        assert "GWETROOT" not in clean
+        assert "PRECTOTCORR" not in clean
+
+    def test_sanitizer_guards_heat_vs_dry_stress_hallucination(self):
+        from app.api.copilot import _validate_and_sanitize_response
+
+        hallucinated = "Because there are 0 dry-stress days, the field has no heat stress."
+        guarded = _validate_and_sanitize_response(hallucinated)
+        assert "Dry-stress days reflect root-zone soil water deficit only" in guarded
+
+    def test_sanitizer_guards_soil_moisture_waterlogging_conflation(self):
+        from app.api.copilot import _validate_and_sanitize_response
+
+        conflated = "Root zone moisture is 0.680 which represents waterlogged soil."
+        guarded = _validate_and_sanitize_response(conflated)
+        assert "adequate plant-available moisture (not waterlogged)" in guarded
+
 

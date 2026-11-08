@@ -42,6 +42,102 @@ interface ChatMessage {
   timestamp?: string;
 }
 
+function renderInlineText(text: string) {
+  const clean = text.replace(/\\([*_`~])/g, "$1");
+  const parts = clean.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} className="font-semibold text-slate-900">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={i} className="font-mono text-emerald-800 bg-emerald-50 px-1 py-0.5 rounded text-[11px]">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+function FormattedMessage({ text, isUser }: { text: string; isUser: boolean }) {
+  if (isUser) {
+    return <div className="whitespace-pre-wrap">{text}</div>;
+  }
+
+  const normalized = text.replace(/\\([*_`~])/g, "$1").trim();
+  const paragraphs = normalized.split(/\n{2,}/);
+
+  return (
+    <div className="space-y-2.5 text-slate-800 text-xs">
+      {paragraphs.map((p, pIdx) => {
+        const lines = p.split("\n").map((l) => l.trim()).filter(Boolean);
+
+        const isNumberedList = lines.length > 0 && lines.every((l) => /^\d+[\.\)]\s/.test(l));
+        if (isNumberedList) {
+          return (
+            <ol key={pIdx} className="space-y-1.5 pl-1 my-1">
+              {lines.map((item, i) => {
+                const match = item.match(/^(\d+)[\.\)]\s*(.*)$/);
+                const num = match ? match[1] : String(i + 1);
+                const content = match ? match[2] : item;
+                return (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="font-bold text-emerald-700 font-mono text-[11px] shrink-0 min-w-4">
+                      {num}.
+                    </span>
+                    <span className="leading-relaxed flex-1">{renderInlineText(content)}</span>
+                  </li>
+                );
+              })}
+            </ol>
+          );
+        }
+
+        const isBulletList = lines.length > 0 && lines.every((l) => /^([•\-\*]|\s*•)\s/.test(l));
+        if (isBulletList) {
+          return (
+            <ul key={pIdx} className="space-y-1 pl-1 my-1">
+              {lines.map((item, i) => {
+                const content = item.replace(/^([•\-\*]|\s*•)\s*/, "");
+                return (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-emerald-700 font-bold shrink-0 mt-0.5">•</span>
+                    <span className="leading-relaxed flex-1">{renderInlineText(content)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+
+        if (p.startsWith("*") && p.endsWith("*") && !p.includes("\n")) {
+          return (
+            <p key={pIdx} className="text-[11px] italic text-slate-500 bg-slate-100/70 p-2 rounded border border-slate-200">
+              {renderInlineText(p.slice(1, -1))}
+            </p>
+          );
+        }
+
+        return (
+          <p key={pIdx} className="leading-relaxed">
+            {lines.map((line, lIdx) => (
+              <span key={lIdx}>
+                {lIdx > 0 && <br />}
+                {renderInlineText(line)}
+              </span>
+            ))}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AdvisorPage() {
   const { currentLocation, openModal } = useLocation();
   const [lat, setLat] = useState(() => (currentLocation ? String(currentLocation.latitude) : "38.34"));
@@ -353,7 +449,7 @@ export default function AdvisorPage() {
                       : "bg-slate-50 border border-slate-200 text-slate-800"
                   }`}
                 >
-                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                  <FormattedMessage text={msg.text} isUser={msg.sender === "user"} />
 
                   {/* Evidence & Provenance Footnotes */}
                   {(msg.evidenceBasis || msg.modelBadge) && (

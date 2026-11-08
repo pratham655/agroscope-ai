@@ -209,17 +209,21 @@ def analyze_heat_stress(
 
     is_stressed = bool(days_35 > 0 or (thermal_anomaly is not None and thermal_anomaly >= 2.0))
 
+    anomaly_note = ""
+    if days_35 > 0 and thermal_anomaly is not None and thermal_anomaly <= 0:
+        anomaly_note = " (Note: Negative or normal mean temperature anomalies do not rule out acute heat stress when daily maximums reach critical thresholds)."
+
     if days_35 > 10 or pct_35 > 15:
         level = "High Heat Exposure"
         assessment = (
             f"Severe heat exposure: {days_35} days ({pct_35}% of period) exceeded {heat_threshold_c}°C, "
-            f"reaching a peak of {max_t}°C. Critical risk for flowering abortion and thermal shock."
+            f"reaching a peak of {max_t}°C. Critical risk for flowering abortion and thermal shock.{anomaly_note}"
         )
     elif days_35 > 0:
         level = "Moderate Heat Exposure"
         assessment = (
             f"Moderate heat exposure: {days_35} days reached or exceeded {heat_threshold_c}°C with "
-            f"peak maximum temperature of {max_t}°C."
+            f"peak maximum temperature of {max_t}°C.{anomaly_note}"
         )
     elif days_30 > 15:
         level = "Mild Thermal Elevation"
@@ -245,6 +249,126 @@ def analyze_heat_stress(
         "thermal_anomaly_c": thermal_anomaly,
         "is_heat_stressed": is_stressed,
         "data_source": "NASA POWER T2M_MAX (daily maximum 2m air temperature)",
+    }
+
+
+# ─── Vapor Pressure Deficit (VPD) & Atmospheric Dryness ──────────────────────
+
+def calculate_vpd(temperature_c: float, relative_humidity_pct: float) -> Optional[float]:
+    """
+    Calculate Vapor Pressure Deficit (VPD) in kPa using FAO-56 formulation.
+
+    VPD = e_s(T) - e_a
+    where e_s(T) = 0.6108 * exp((17.27 * T) / (T + 237.3))  [saturation vapor pressure, kPa]
+    and   e_a    = e_s(T) * (RH / 100)                     [actual vapor pressure, kPa]
+    """
+    if (
+        temperature_c is None
+        or relative_humidity_pct is None
+        or np.isnan(temperature_c)
+        or np.isnan(relative_humidity_pct)
+        or relative_humidity_pct < 0
+        or relative_humidity_pct > 100
+        or temperature_c < -900
+    ):
+        return None
+
+    # Saturation vapor pressure (Allen et al. FAO-56 / Tetens)
+    es = 0.6108 * np.exp((17.27 * temperature_c) / (temperature_c + 237.3))
+    ea = es * (relative_humidity_pct / 100.0)
+    vpd = max(0.0, float(es - ea))
+    return round(vpd, 3)
+
+
+def analyze_atmospheric_dryness(
+    t2m_series: List[Optional[float]],
+    rh2m_series: Optional[List[Optional[float]]] = None,
+) -> Dict[str, Any]:
+    """
+    Independent atmospheric dryness and evaporative demand (VPD) evaluation.
+
+    STRICT SCIENTIFIC RULES:
+    1. Keep vapor pressure deficit / atmospheric evaporative demand completely separate
+       from root-zone soil moisture (GWETROOT).
+    2. A field can have adequate soil moisture and simultaneously high evaporative demand
+       (driving severe crop transpiration pull), or vice-versa.
+    3. NEVER infer low evaporative demand solely from zero dry-stress days or soil wetness.
+    4. If relative humidity (RH2M) or required atmospheric variables are missing or have
+       fewer than 5 valid readings, returns an explicit uncertainty statement:
+       "Insufficient data to assess atmospheric dryness (VPD)".
+    """
+    if not rh2m_series or not t2m_series:
+        return {
+            "status": "insufficient_data",
+            "assessment": "Insufficient data to assess atmospheric dryness (VPD).",
+            "level": "Insufficient Data",
+            "mean_vpd_kpa": None,
+            "max_vpd_kpa": None,
+            "is_elevated_demand": False,
+            "data_source": "NASA POWER RH2M / T2M (2m relative humidity & air temperature)",
+        }
+
+    vpds: List[float] = []
+    for t, rh in zip(t2m_series, rh2m_series):
+        if t is not None and rh is not None:
+            vpd = calculate_vpd(float(t), float(rh))
+            if vpd is not None:
+                vpds.append(vpd)
+
+    if len(vpds) < 5:
+        return {
+            "status": "insufficient_data",
+            "assessment": "Insufficient data to assess atmospheric dryness (VPD).",
+            "level": "Insufficient Data",
+            "mean_vpd_kpa": None,
+            "max_vpd_kpa": None,
+            "is_elevated_demand": False,
+            "data_source": "NASA POWER RH2M / T2M (2m relative humidity & air temperature)",
+        }
+
+    arr_vpd = np.array(vpds)
+    mean_vpd = round(float(np.mean(arr_vpd)), 2)
+    max_vpd = round(float(np.max(arr_vpd)), 2)
+
+    # Agronomic VPD classification (in kPa)
+    if mean_vpd > 2.0 or max_vpd > 3.0:
+        level = "High Evaporative Demand"
+        assessment = (
+            f"High atmospheric evaporative demand: mean VPD is {mean_vpd:.2f} kPa (peak {max_vpd:.2f} kPa). "
+            f"Dry atmospheric conditions exert intense transpirational pull on crops, risking stomatal closure "
+            f"and heat-drought stress regardless of soil moisture levels."
+        )
+        is_elevated = True
+    elif mean_vpd >= 1.2:
+        level = "Elevated Evaporative Demand"
+        assessment = (
+            f"Elevated atmospheric evaporative demand: mean VPD is {mean_vpd:.2f} kPa (peak {max_vpd:.2f} kPa). "
+            f"Increased atmospheric moisture pull accelerates crop evapotranspiration."
+        )
+        is_elevated = True
+    elif mean_vpd >= 0.4:
+        level = "Optimal Evaporative Demand"
+        assessment = (
+            f"Optimal atmospheric evaporative demand: mean VPD is {mean_vpd:.2f} kPa (peak {max_vpd:.2f} kPa), "
+            f"providing favorable plant transpirational pull without excessive evaporative strain."
+        )
+        is_elevated = False
+    else:
+        level = "Low Evaporative Demand"
+        assessment = (
+            f"Low atmospheric evaporative demand: mean VPD is {mean_vpd:.2f} kPa (peak {max_vpd:.2f} kPa), "
+            f"indicating humid atmospheric conditions with minimal evaporative stress (monitor for potential foliar disease pressure)."
+        )
+        is_elevated = False
+
+    return {
+        "status": "evaluated",
+        "level": level,
+        "assessment": assessment,
+        "mean_vpd_kpa": mean_vpd,
+        "max_vpd_kpa": max_vpd,
+        "is_elevated_demand": is_elevated,
+        "data_source": "NASA POWER RH2M / T2M (2m relative humidity & air temperature via FAO-56 formulation)",
     }
 
 

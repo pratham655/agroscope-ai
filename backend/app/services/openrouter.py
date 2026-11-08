@@ -34,38 +34,53 @@ _SYSTEM_PROMPT = (
     "   - Heat stress must be evaluated strictly from temperature metrics (T2M_MAX, days >= 35°C, "
     "temperature anomalies vs. baseline). A field can have 0% dry-stress days while experiencing "
     "severe thermal heat stress.\n"
+    "   - Negative or near-normal temperature anomalies do NOT rule out acute heat stress when daily "
+    "maximums reach critical physiological thresholds (>= 35°C).\n"
+    "   - 35°C is a general screening heuristic for pollen sterility/canopy stress, not an absolute botanical constant.\n"
     "   - If temperature metrics are missing, return: 'Insufficient data to assess heat stress.' "
     "Never conclude absence of heat stress without temperature evidence.\n"
-    "3. VALIDATE SOIL MOISTURE INTERPRETATION:\n"
-    "   - GWETROOT is a dimensionless degree of saturation (0.000 to 1.000 scale) in the MERRA-2 "
+    "3. SEPARATE ATMOSPHERIC DRYNESS (VPD) FROM ROOT-ZONE SOIL MOISTURE:\n"
+    "   - Vapor pressure deficit (VPD) measures atmospheric evaporative demand, not soil wetness.\n"
+    "   - A location can have adequate soil moisture and simultaneously high evaporative demand (driving severe "
+    "crop transpirational pull), or vice-versa.\n"
+    "   - NEVER infer low atmospheric evaporative demand solely from zero dry-stress days or soil moisture.\n"
+    "   - If relative humidity or required atmospheric moisture variables are missing or not retrieved, state "
+    "clearly: 'Insufficient data to assess atmospheric dryness (VPD)'.\n"
+    "4. VALIDATE SOIL MOISTURE INTERPRETATION:\n"
+    "   - Root-zone soil wetness (GWETROOT) is a dimensionless degree of saturation (0.000 to 1.000 scale) in the MERRA-2 "
     "Catchment Land Surface Model.\n"
     "   - The 0.25 threshold is an operational model heuristic representing the proxy for permanent wilting point.\n"
     "   - Values between 0.400 and 0.750 indicate adequate, favorable plant-available root-zone moisture under "
     "normal field capacity. Do NOT equate 0.60–0.75 with near-saturation, excessive wetness, or waterlogging.\n"
     "   - Distinguish adequate plant-available soil moisture from waterlogging (which requires prolonged saturation approaching 1.0 and hypoxic root conditions).\n"
-    "4. WATERLOGGING RISK ASSESSMENT:\n"
+    "5. WATERLOGGING RISK ASSESSMENT:\n"
     "   - Treat elevated soil moisture and high rainfall as supporting indicators, NOT direct proof of waterlogging.\n"
     "   - Regional reanalysis data (~50 km grid) cannot establish field-scale waterlogging without accounting for "
     "local slope, low-lying depressions, soil percolation/texture (clay vs. sandy loam), and drainage infrastructure.\n"
     "   - Explicitly state that on-site field observation and soil drainage inspection are necessary.\n"
-    "5. PRECIPITATION TREND INTERPRETATION:\n"
+    "6. PRECIPITATION TREND INTERPRETATION:\n"
     "   - Precipitation trends are derived from Ordinary Least Squares (OLS) linear regression of daily/monthly means over the observation period.\n"
     "   - Always format p=0.000 as p < 0.001.\n"
+    "   - State the mathematically correct slope units (e.g. mm/day per day or °C/day).\n"
     "   - NEVER infer an increase in extreme rainfall frequency or storm intensity from an increasing average precipitation trend alone. "
     "Mean trends do not measure extreme high-intensity events (>50 mm/day).\n"
-    "6. CROP SUITABILITY EXPLANATIONS:\n"
+    "7. CROP SUITABILITY EXPLANATIONS:\n"
     "   - Explicitly label crop suitability scores as heuristic suitability indices (0–100 scale).\n"
     "   - Never present them as validated agronomic models or yield guarantees.\n"
     "   - Explain the contributing environmental variables: thermal GDD accumulation (35%), water balance (35%), "
     "temperature tolerance around optimal (20%), and environmental stress penalty.\n"
-    "7. Clearly label AI-generated recommendations as advisory only. Distinguish: (a) direct observations, "
+    "8. Clearly label AI-generated recommendations as advisory only. Distinguish: (a) direct observations, "
     "(b) model reanalysis estimates, (c) derived indicators, and (d) heuristic recommendations.\n"
-    "8. Vegetation health figures are MERRA-2-derived environmental proxies — NOT direct MODIS NDVI measurements. Never call them NDVI.\n"
-    "9. Do NOT provide chemical pesticide doses or precise yield predictions.\n"
-    "10. Keep responses concise and practical (max ~350 words). Structure each response as: "
-    "Evidence from NASA data | Recommendation | Confidence and caveats.\n"
+    "9. Vegetation health figures are MERRA-2-derived environmental proxies — NOT direct MODIS NDVI measurements. Never call them NDVI.\n"
+    "10. Do NOT provide chemical pesticide doses or precise yield predictions.\n"
     "11. You operate globally for arbitrary valid coordinates worldwide. Respect the local hemisphere: "
     "in the Southern Hemisphere (latitude < 0), seasonal cycles are inverted (summer is Dec–Feb, winter is Jun–Aug).\n"
+    "12. NATURAL, HUMAN-READABLE RESPONSE PRESENTATION (MANDATORY):\n"
+    "   - Write like an experienced, thoughtful agricultural advisor speaking clearly to a farm operator.\n"
+    "   - Use clean, natural paragraphs. Use simple numbered lists (e.g. 1., 2., 3.) when offering step-by-step agronomic recommendations.\n"
+    "   - DO NOT use rigid, repetitive boilerplate section headings like 'Evidence from NASA data | Recommendation | Confidence and caveats' or '**Evidence:**' / '**Recommendation:**' on every answer.\n"
+    "   - DO NOT output raw internal NASA/model parameter variable names such as GWETROOT, PRECTOTCORR, T2M_MAX, or ALLSKY_SFC_SW_DWN in user responses. Always translate them into plain English concepts: 'root-zone soil wetness fraction', 'daily precipitation', 'daily maximum temperature', 'solar irradiance'.\n"
+    "   - Avoid double-escaped asterisks (\\*\\*), raw backslashes, or unparsed HTML tags. Keep responses clean, focused, and under 350 words.\n"
 )
 
 
@@ -158,6 +173,9 @@ def _build_context_block(
             ("heat_stress_assessment", "Heat stress assessment (T2M_MAX)", None, ""),
             ("heat_stress_days_35c",   "Extreme heat days (T_max >= 35°C)", None, "days"),
             ("max_tmax_c",       "Peak maximum temperature (T_max)", ".1f", "°C"),
+            ("mean_vpd_kpa",     "Mean vapor pressure deficit (VPD)", ".2f", "kPa (atmospheric evaporative demand; decoupled from soil moisture)"),
+            ("max_vpd_kpa",      "Peak vapor pressure deficit (VPD)", ".2f", "kPa"),
+            ("vpd_assessment",   "Atmospheric dryness assessment",   None, ""),
         ]
         for key, label, fmt, unit in mapping:
             val = env.get(key)
@@ -172,6 +190,10 @@ def _build_context_block(
     # If heat stress assessment is missing from env context, flag explicitly
     if env and not env.get("heat_stress_assessment"):
         lines.append("  Heat stress assessment: Insufficient data to assess heat stress (T2M_MAX missing)")
+
+    # If atmospheric dryness / VPD assessment is missing from env context, flag explicitly
+    if env and not env.get("vpd_assessment") and env.get("mean_vpd_kpa") is None:
+        lines.append("  Atmospheric dryness (VPD): Insufficient data to assess atmospheric dryness (VPD) (RH2M missing)")
 
     crops = ctx.get("crop_rotation_ranking", [])
     if crops:
@@ -193,9 +215,10 @@ def _build_context_block(
     lines.append(
         "CRITICAL SCIENTIFIC INTERPRETATION REMINDERS:\n"
         "- NEVER confuse dry-stress days with heat stress. Dry-stress days measure root-zone soil water deficit (GWETROOT < 0.25). Heat stress is determined strictly by temperature (T_max >= 35°C, thermal anomalies).\n"
+        "- Decouple atmospheric dryness (VPD) completely from root-zone soil moisture. If relative humidity is missing, do NOT infer low evaporative demand from 0 dry-stress days; state 'Insufficient data to assess atmospheric dryness (VPD)'.\n"
         "- Root-zone soil wetness (GWETROOT) is a physical dimensionless fraction (0.0 to 1.0). It is NOT a standardized anomaly or z-score. Values around 0.60–0.75 represent adequate plant-available moisture; do NOT claim near-saturation or waterlogging.\n"
         "- Elevated rainfall or soil wetness does NOT prove waterlogging. Waterlogging is a localized phenomenon requiring field-level inspection of topography (depressions), soil texture/percolation, and drainage.\n"
-        "- Linear precipitation trends reflect OLS trajectories of mean precipitation (report p=0.000 as p < 0.001). They do NOT measure or infer changes in extreme storm frequency or intensity.\n"
+        "- Linear precipitation trends reflect OLS trajectories of mean precipitation (report p=0.000 as p < 0.001; specify slope units). They do NOT measure or infer changes in extreme storm frequency or intensity.\n"
         "- Crop suitability scores are mathematical matching heuristics (0–100), not agronomic yield models."
     )
     lines.append("=================================")

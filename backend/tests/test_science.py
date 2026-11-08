@@ -20,6 +20,7 @@ from app.services.science import (
     analyze_soil_moisture, compute_stress_score,
     linear_trend, score_crop_rotation,
     analyze_heat_stress,
+    calculate_vpd, analyze_atmospheric_dryness,
     CROP_PROFILES,
 )
 
@@ -363,3 +364,79 @@ class TestCropRotation:
         results = score_crop_rotation(1100, 600, 0.7, 25, 20)
         crop_ids = [r["crop_id"] for r in results]
         assert "soybean" in crop_ids  # present, not necessarily top
+
+
+# ─── Vapor Pressure Deficit (VPD) & Atmospheric Dryness ──────────────────────
+
+class TestVPDAndAtmosphericDryness:
+    def test_calculate_vpd_standard(self):
+        """At 25°C, es ≈ 3.168 kPa. At 50% RH, ea ≈ 1.584 kPa -> VPD ≈ 1.58 kPa."""
+        vpd = calculate_vpd(25.0, 50.0)
+        assert vpd is not None
+        assert 1.50 <= vpd <= 1.65
+
+    def test_calculate_vpd_saturated(self):
+        """100% relative humidity yields 0.0 kPa VPD."""
+        vpd = calculate_vpd(20.0, 100.0)
+        assert vpd == pytest.approx(0.0)
+
+    def test_calculate_vpd_invalid_inputs(self):
+        """Missing or out-of-range inputs return None."""
+        assert calculate_vpd(None, 50.0) is None
+        assert calculate_vpd(25.0, None) is None
+        assert calculate_vpd(-999.0, 50.0) is None
+        assert calculate_vpd(25.0, -5.0) is None
+        assert calculate_vpd(25.0, 105.0) is None
+
+    def test_analyze_atmospheric_dryness_missing_data_uncertainty(self):
+        """Missing RH2M series must return uncertainty statement rather than assuming low demand."""
+        res_none = analyze_atmospheric_dryness([25.0] * 10, None)
+        assert res_none["status"] == "insufficient_data"
+        assert "Insufficient data to assess atmospheric dryness (VPD)" in res_none["assessment"]
+        assert res_none["mean_vpd_kpa"] is None
+
+        res_short = analyze_atmospheric_dryness([25.0] * 3, [50.0] * 3)
+        assert res_short["status"] == "insufficient_data"
+        assert "Insufficient data to assess atmospheric dryness (VPD)" in res_short["assessment"]
+
+    def test_analyze_atmospheric_dryness_high_demand(self):
+        """High temperature (35°C) and low RH (25%) yields high evaporative demand (> 2.0 kPa)."""
+        t = [35.0] * 10
+        rh = [25.0] * 10
+        res = analyze_atmospheric_dryness(t, rh)
+        assert res["status"] == "evaluated"
+        assert res["level"] == "High Evaporative Demand"
+        assert res["mean_vpd_kpa"] > 2.0
+        assert res["is_elevated_demand"] is True
+
+    def test_analyze_atmospheric_dryness_optimal_demand(self):
+        """Moderate temperature (22°C) and moderate RH (65%) yields optimal demand."""
+        t = [22.0] * 10
+        rh = [65.0] * 10
+        res = analyze_atmospheric_dryness(t, rh)
+        assert res["status"] == "evaluated"
+        assert res["level"] == "Optimal Evaporative Demand"
+        assert 0.4 <= res["mean_vpd_kpa"] <= 1.2
+        assert res["is_elevated_demand"] is False
+
+
+class TestHeatStressDecoupling:
+    def test_negative_anomaly_does_not_rule_out_heat_stress(self):
+        """When T_max reaches 36°C, heat stress must be flagged even if mean anomaly is negative."""
+        tmax = [36.0, 37.0, 36.5, 35.5, 36.0] + [30.0] * 25
+        # 30 days of mean temp where recent is cooler than overall
+        tmean = [32.0] * 30 + [28.0] * 30
+        res = analyze_heat_stress(tmax, tmean)
+        assert res["status"] == "evaluated"
+        assert res["heat_stress_days_35c"] >= 5
+        assert res["is_heat_stressed"] is True
+        assert res["thermal_anomaly_c"] < 0
+        assert "Negative or normal mean temperature anomalies do not rule out acute heat stress" in res["assessment"]
+
+    def test_missing_tmax_returns_uncertainty(self):
+        """Fewer than 5 T_max observations returns explicit uncertainty statement."""
+        res = analyze_heat_stress([32.0, None, None])
+        assert res["status"] == "insufficient_data"
+        assert "Insufficient data to assess heat stress" in res["assessment"]
+        assert res["heat_stress_days_35c"] is None
+
