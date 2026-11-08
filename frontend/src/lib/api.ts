@@ -3,7 +3,29 @@
  * Communicates with the FastAPI backend.
  */
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+function getNormalizedBaseUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_API_URL;
+  let url = (typeof raw === "string" ? raw : "")
+    .replace(/^[\s\uFEFF\xA0\t\r\n]+|[\s\uFEFF\xA0\t\r\n]+$/g, "")
+    .trim();
+
+  if (!url) {
+    url = process.env.NODE_ENV === "production"
+      ? "https://agroscope-ai.onrender.com"
+      : "http://localhost:8000";
+  }
+
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = `https://${url}`;
+  }
+
+  url = url.replace(/\/+$/, "");
+  url = url.replace(/\/api$/, "");
+
+  return url;
+}
+
+const BASE = getNormalizedBaseUrl();
 
 export interface FieldAnalysisParams {
   latitude: number;
