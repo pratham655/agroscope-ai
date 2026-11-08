@@ -112,7 +112,7 @@ export default function FieldBoundaryMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
     void import("leaflet").then((L) => {
-      if (!mapRef.current) return;
+      if (mapRef.current !== map) return;
       if (polygonRef.current) map.removeLayer(polygonRef.current);
       if (markerRef.current) map.removeLayer(markerRef.current);
       polygonRef.current = null;
@@ -156,6 +156,7 @@ export default function FieldBoundaryMap({
     const map = mapRef.current;
     if (!map || !mapReady) return;
     void import("leaflet").then((L) => {
+      if (mapRef.current !== map) return;
       if (imageryRef.current) {
         map.removeLayer(imageryRef.current);
         imageryRef.current = null;
