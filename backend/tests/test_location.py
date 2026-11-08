@@ -595,3 +595,19 @@ def test_reverse_geocode_curated_point_does_not_call_public_nominatim():
         assert response.json()["place"] == "Mumbai"
         assert response.json()["source"] == "Global Gazetteer"
         assert mock_get.await_count == 0
+
+
+def test_scenarios_reverse_geocode_curated_point_does_not_call_public_nominatim():
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        response = client.get("/api/scenarios/reverse-geocode", params={"lat": MUMBAI_LAT, "lon": MUMBAI_LON})
+        assert response.status_code == 200
+        assert response.json()["place"] == "Mumbai"
+        assert response.json()["source"] == "Global Gazetteer"
+        assert mock_get.await_count == 0
+
+
+def test_broad_country_query_tokenizer_keeps_multiword_names_intact():
+    from app.api import location as location_api
+    assert location_api._is_broad_country_query("India") is True
+    assert location_api._is_broad_country_query("United States") is False
+    assert location_api._is_broad_country_query("Mumbai, India") is False
