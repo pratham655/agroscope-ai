@@ -234,6 +234,7 @@ async def copilot_chat(body: CopilotChatRequest = Body(...)):
                 req_lat=body.requested_latitude,
                 req_lon=body.requested_longitude,
                 req_label=body.canonical_location_label,
+                change_ctx=change_ctx,
             ),
             ai_powered=False,
             fallback_reason="OPENROUTER_API_KEY not configured.",
@@ -353,6 +354,7 @@ def _rule_based_fallback(
     req_lat: float,
     req_lon: float,
     req_label: Optional[str] = None,
+    change_ctx: Optional[dict[str, Any]] = None,
 ) -> str:
     """
     Generate a natural, scientifically grounded text reply from NASA field data when AI is off.
@@ -413,6 +415,25 @@ def _rule_based_fallback(
         lines.append("**Active Advisory Alerts:**")
         for ev in evidence:
             lines.append(f"  • {ev}")
+        lines.append("")
+
+    if change_ctx:
+        p1 = change_ctx.get("period1") or {}
+        p2 = change_ctx.get("period2") or {}
+        lines.append("**Historical comparison context (Satellite Change Detective):**")
+        lines.append(
+            f"Period 1 ({p1.get('period_start', '?')} to {p1.get('period_end', '?')}): "
+            f"stress score {p1.get('stress_score', 'not provided')}; "
+            f"Period 2 ({p2.get('period_start', '?')} to {p2.get('period_end', '?')}): "
+            f"stress score {p2.get('stress_score', 'not provided')}."
+        )
+        lines.append(
+            "This comparison is a heuristic, period-specific summary. A lower score alone does not prove "
+            "field recovery; inspect the individual indicators, period lengths, seasonal context, data completeness "
+            "and scientific note. Vegetation values may be proxies rather than direct satellite NDVI."
+        )
+        if change_ctx.get("scientific_note"):
+            lines.append(f"Scientific limitation: {change_ctx['scientific_note']}")
         lines.append("")
 
     # Topic-specific guidance in natural agronomic prose
