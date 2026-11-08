@@ -458,7 +458,24 @@ export async function askCopilot(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `Copilot API error ${res.status}`);
+    const detail = err?.detail;
+    const message = Array.isArray(detail)
+      ? detail.map((item: unknown) => {
+          if (item && typeof item === "object") {
+            const issue = item as { loc?: unknown[]; msg?: unknown };
+            const field = Array.isArray(issue.loc)
+              ? issue.loc.filter((part) => part !== "body").join(".")
+              : "request";
+            return `${field}: ${typeof issue.msg === "string" ? issue.msg : "Invalid value"}`;
+          }
+          return String(item);
+        }).join("; ")
+      : typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object"
+          ? JSON.stringify(detail)
+          : `Copilot API error ${res.status}`;
+    throw new Error(message);
   }
   return res.json();
 }
