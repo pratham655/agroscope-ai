@@ -578,8 +578,11 @@ def test_real_slow_nominatim_request_is_cancelled_by_total_timeout(monkeypatch):
     from app.api import location as location_api
     location_api._nominatim_cache.clear()
     monkeypatch.setattr(location_api, "_NOMINATIM_TOTAL_TIMEOUT_S", 0.01)
-    monkeypatch.setattr(location_api, "_NOMINATIM_MIN_INTERVAL_S", 60)
-    monkeypatch.setattr(location_api, "_nominatim_last_request_at", time.monotonic())
+
+    async def no_rate_limit_wait():
+        return None
+
+    monkeypatch.setattr(location_api, "_wait_for_nominatim_slot", no_rate_limit_wait)
 
     async def slow_request(*args, **kwargs):
         await asyncio.sleep(0.2)
