@@ -475,7 +475,7 @@ def _wait_for_nominatim_slot() -> None:
 
 
 def _is_broad_country_query(query: str) -> bool:
-    tokens = [t for t in re.split(r"[^\\w]+", _normalize_text(query.strip())) if len(t) >= 2]
+    tokens = [t for t in re.split(r"[^\w]+", _normalize_text(query.strip())) if len(t) >= 2]
     return len(tokens) == 1 and tokens[0] in _BROAD_COUNTRIES
 
 def _format_coord_label(lat: float, lon: float) -> str:
