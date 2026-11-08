@@ -530,3 +530,56 @@ class TestResponseSanitizer:
         assert "adequate plant-available moisture (not waterlogged)" in guarded
 
 
+
+
+class TestHistoricalComparisonContext:
+    def test_change_detection_context_is_included_in_model_prompt(self):
+        comparison = {
+            "location": {"latitude": 30.73, "longitude": 76.78},
+            "period1": {"label": "2022", "period_start": "2022-07-01", "period_end": "2022-07-30", "stress_score": 42.3},
+            "period2": {"label": "2023", "period_start": "2023-07-01", "period_end": "2023-07-30", "stress_score": 24.5},
+            "comparison_table": [{"indicator": "Stress score", "period1_value": 42.3, "period2_value": 24.5, "delta": -17.8, "direction": "decreased"}],
+            "narrative": "The composite score decreased.",
+            "scientific_note": "Heuristic comparison only.",
+            "is_demo": False,
+        }
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"):
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.post = AsyncMock(return_value=_mock_or_response(_GOOD_REPLY))
+            with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
+                asyncio.run(or_service.openrouter_chat(
+                    "Why did stress change?",
+                    _SAMPLE_CTX,
+                    requested_latitude=30.73,
+                    requested_longitude=76.78,
+                    change_detection_context=comparison,
+                ))
+        messages = mock_client.post.call_args.kwargs["json"]["messages"]
+        comparison_message = next(m["content"] for m in messages if "SATELLITE CHANGE DETECTIVE HISTORICAL COMPARISON" in m["content"])
+        assert "2022-07-01" in comparison_message
+        assert "42.3" in comparison_message and "24.5" in comparison_message
+        assert "lower score alone does not prove field recovery" in comparison_message
+        assert "Demo data: False" in comparison_message
+
+    def test_comparison_location_mismatch_is_blocked(self):
+        comparison = {
+            "location": {"latitude": 52.3676, "longitude": 4.9041},
+            "period1": {}, "period2": {}, "comparison_table": [],
+        }
+        with patch("app.api.copilot.openrouter_chat") as mocked:
+            response = get_client().post("/api/copilot/chat", json={
+                "question": "Compare Amsterdam 2022 and 2023",
+                "requested_latitude": 30.73,
+                "requested_longitude": 76.78,
+                "canonical_location_label": "Punjab, India",
+                "advisor_context": _SAMPLE_CTX,
+                "change_detection_context": comparison,
+            })
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["mismatch_detected"] is True
+        assert payload["location_match"] is False
+        assert "different location" in payload["reply"]
+        mocked.assert_not_called()
