@@ -621,9 +621,10 @@ async def geocode_location(
     Supports:
       1. Coordinate parsing (e.g. '19.076, 72.877')
       2. Fast offline gazetteer matching for instant resilience (e.g. 'Mumbai')
-      3. OpenStreetMap Nominatim search with bounded connect/total timeouts
+      3. OpenStreetMap Nominatim search for unresolved or broad-country queries
       Guarantees:
-      - Always returns a response within <= 2.0s.
+      - Upstream requests are cached and rate-limited to one per 1.05 seconds per process.
+      - Always returns a bounded response.
       - Never hangs or leaves requests pending.
       - Never substitutes Punjab or unrelated benchmark coordinates when lookup fails.
     """
@@ -737,8 +738,8 @@ async def reverse_geocode_location(
     Reverse geocodes latitude/longitude coordinates to an administrative location label.
     Guarantees:
       - Always returns a response within <= 2.0s.
-      - If Nominatim is unavailable, checks nearest gazetteer entry within ~25km,
-        or falls back to an exact coordinate label.
+      - Resolves curated locations locally; unresolved coordinates use cached, rate-limited Nominatim,
+        or fall back to an exact coordinate label.
       - NEVER silently substitutes Punjab or benchmark coordinates.
     """
     final_lat = latitude if latitude is not None else lat
