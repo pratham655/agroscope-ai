@@ -539,3 +539,83 @@ def test_geocode_nominatim_live_success_simulation():
         assert abs(heidelberg["longitude"] - 8.6908) < 0.001
         assert heidelberg["country"] == "Germany"
         assert heidelberg["source"] == "OpenStreetMap Nominatim"
+
+
+# ─── 11. Public Nominatim usage policy regressions ───────────────────────────
+
+def test_curated_locality_hit_does_not_call_public_nominatim():
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        response = client.get("/api/location/geocode", params={"query": "mumbai, india"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["results"][0]["name"] == "Mumbai"
+        assert mock_get.await_count == 0
+
+
+def test_nominatim_search_cache_reuses_successful_response():
+    from app.api import location as location_api
+    location_api._nominatim_cache.clear()
+    req = httpx.Request("GET", "https://nominatim.openstreetmap.org/search")
+    upstream = httpx.Response(200, json=[{"lat": "49.40768", "lon": "8.69079", "display_name": "Heidelberg", "name": "Heidelberg", "address": {"city": "Heidelberg", "country": "Germany"}}], request=req)
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=upstream) as mock_get:
+        first = client.get("/api/location/geocode", params={"query": "heidelberg cache test"})
+        second = client.get("/api/location/geocode", params={"query": "heidelberg cache test"})
+        assert first.status_code == second.status_code == 200
+        assert first.json()["results"] == second.json()["results"]
+        assert mock_get.await_count == 1
+
+
+def test_nominatim_request_uses_project_identity_not_unowned_nasa_email():
+    from app.api import location as location_api
+    assert "github.com/pratham655/agroscope-ai" in location_api._NOMINATIM_USER_AGENT
+    assert "nasa.gov" not in location_api._NOMINATIM_USER_AGENT
+
+
+def test_real_slow_nominatim_request_is_cancelled_by_total_timeout(monkeypatch):
+    from app.api import location as location_api
+    location_api._nominatim_cache.clear()
+    monkeypatch.setattr(location_api, "_NOMINATIM_TOTAL_TIMEOUT_S", 0.01)
+
+    async def slow_request(*args, **kwargs):
+        await asyncio.sleep(0.2)
+        return httpx.Response(200, json=[])
+
+    with patch("httpx.AsyncClient.get", new=slow_request):
+        started = time.perf_counter()
+        result = asyncio.run(location_api._fetch_nominatim_search("slow upstream regression", limit=4))
+        elapsed = time.perf_counter() - started
+        assert result == []
+        assert elapsed < 0.15
+
+
+def test_reverse_geocode_curated_point_does_not_call_public_nominatim():
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        response = client.get("/api/location/reverse-geocode", params={"latitude": MUMBAI_LAT, "longitude": MUMBAI_LON})
+        assert response.status_code == 200
+        assert response.json()["place"] == "Mumbai"
+        assert response.json()["source"] == "Global Gazetteer"
+        assert mock_get.await_count == 0
+
+
+def test_scenarios_reverse_geocode_curated_point_does_not_call_public_nominatim():
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        response = client.get("/api/scenarios/reverse-geocode", params={"lat": MUMBAI_LAT, "lon": MUMBAI_LON})
+        assert response.status_code == 200
+        assert response.json()["place"] == "Mumbai"
+        assert response.json()["source"] == "Global Gazetteer"
+        assert mock_get.await_count == 0
+
+
+def test_broad_country_query_tokenizer_keeps_multiword_names_intact():
+    from app.api import location as location_api
+    assert location_api._is_broad_country_query("India") is True
+    assert location_api._is_broad_country_query("United States") is True
+    assert location_api._is_broad_country_query("Mumbai, India") is False
+
+
+def test_nominatim_cache_enforces_maximum_size():
+    from app.api import location as location_api
+    location_api._nominatim_cache.clear()
+    for index in range(location_api._NOMINATIM_CACHE_MAX_ENTRIES + 25):
+        location_api._cache_set(("test", index), [])
+    assert len(location_api._nominatim_cache) == location_api._NOMINATIM_CACHE_MAX_ENTRIES

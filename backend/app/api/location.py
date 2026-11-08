@@ -22,6 +22,8 @@ import logging
 import math
 import re
 import unicodedata
+import threading
+import time
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -434,6 +436,58 @@ def _normalize_text(text: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
+
+# Nominatim's public service policy requires no more than one request per second.
+# Serialize calls in-process and cache successful responses to protect the service.
+_NOMINATIM_MIN_INTERVAL_S = 1.05
+_NOMINATIM_CACHE_TTL_S = 300
+_NOMINATIM_CACHE_MAX_ENTRIES = 512
+_NOMINATIM_TOTAL_TIMEOUT_S = 7.0
+_nominatim_gate = threading.Lock()
+_nominatim_last_request_at = 0.0
+_nominatim_cache: Dict[tuple, tuple] = {}
+_nominatim_cache_lock = threading.Lock()
+_NOMINATIM_USER_AGENT = "AGROSCOPE-AI/1.0 (https://github.com/pratham655/agroscope-ai)"
+
+
+def _cache_get(key: tuple):
+    with _nominatim_cache_lock:
+        cached = _nominatim_cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
+        if cached:
+            _nominatim_cache.pop(key, None)
+    return None
+
+
+def _cache_set(key: tuple, value: Any) -> None:
+    with _nominatim_cache_lock:
+        now = time.monotonic()
+        expired = [cache_key for cache_key, (expires_at, _) in _nominatim_cache.items() if expires_at <= now]
+        for cache_key in expired:
+            _nominatim_cache.pop(cache_key, None)
+        while len(_nominatim_cache) >= _NOMINATIM_CACHE_MAX_ENTRIES and key not in _nominatim_cache:
+            _nominatim_cache.pop(next(iter(_nominatim_cache)))
+        _nominatim_cache[key] = (now + _NOMINATIM_CACHE_TTL_S, value)
+
+
+def _wait_for_nominatim_slot() -> None:
+    """Serialize public-service calls and enforce a 1.05-second minimum interval."""
+    global _nominatim_last_request_at
+    with _nominatim_gate:
+        delay = _NOMINATIM_MIN_INTERVAL_S - (time.monotonic() - _nominatim_last_request_at)
+        if delay > 0:
+            time.sleep(delay)
+        _nominatim_last_request_at = time.monotonic()
+
+
+def _is_broad_country_query(query: str) -> bool:
+    normalized = _normalize_text(query.strip())
+    if normalized in _BROAD_COUNTRIES:
+        return True
+    tokens = [t for t in re.split(r"[^\w]+", normalized) if len(t) >= 2]
+    return len(tokens) == 1 and tokens[0] in _BROAD_COUNTRIES
+
 def _format_coord_label(lat: float, lon: float) -> str:
     """Format human-readable coordinate label with cardinal directions."""
     lat_dir = "N" if lat >= 0 else "S"
@@ -481,96 +535,78 @@ def _match_gazetteer(query: str) -> List[Dict[str, Any]]:
 
 
 async def _fetch_nominatim_search(query: str, limit: int = 7) -> List[Dict[str, Any]]:
-    """
-    Safely query OpenStreetMap Nominatim with bounded connect and total timeouts.
-    Guaranteed never to hang or raise unhandled exceptions.
-    """
-    headers = {
-        "User-Agent": "AGROSCOPE-AI/1.0 (NASA Space Apps Challenge 2026; Agricultural Earth Intelligence; mailto:agroscope-ai@nasa.gov)",
-        "Accept-Language": "en",
-        "Accept": "application/json",
-    }
+    """Query Nominatim with short-lived caching, a 1 req/s gate and bounded timeouts."""
+    cache_key = ("search", _normalize_text(query.strip()), limit)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return [dict(item) for item in cached if isinstance(item, dict)]
+
+    headers = {"User-Agent": _NOMINATIM_USER_AGENT, "Accept-Language": "en", "Accept": "application/json"}
     params = {"q": query, "format": "json", "addressdetails": 1, "limit": limit}
-    timeout_cfg = httpx.Timeout(timeout=1.8, connect=0.8, read=1.2, write=0.5, pool=0.5)
+    timeout_cfg = httpx.Timeout(timeout=5.0, connect=1.0, read=3.0, write=0.5, pool=0.5)
 
     async def _do_search() -> List[Dict[str, Any]]:
-        async with httpx.AsyncClient(
-            timeout=timeout_cfg,
-            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5)
-        ) as client:
-            resp = await client.get(
-                "https://nominatim.openstreetmap.org/search",
-                params=params,
-                headers=headers,
-            )
-            if resp.status_code == 200:
-                try:
-                    data = resp.json()
-                    if isinstance(data, list):
-                        return data
-                except Exception as json_err:
-                    logger.warning(f"Nominatim search returned non-JSON payload: {json_err}")
-            else:
-                logger.warning(f"Nominatim search returned HTTP {resp.status_code} for query='{query}'")
-            return []
+        await asyncio.to_thread(_wait_for_nominatim_slot)
+        async with httpx.AsyncClient(timeout=timeout_cfg, limits=httpx.Limits(max_connections=1, max_keepalive_connections=1)) as client:
+            resp = await client.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers)
+            if resp.status_code != 200:
+                logger.warning("Nominatim search returned HTTP %s for query=%r", resp.status_code, query)
+                return []
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                logger.warning("Nominatim search returned malformed JSON: %s", exc)
+                return []
+            return data if isinstance(data, list) else []
 
     try:
-        return await asyncio.wait_for(_do_search(), timeout=2.0)
-    except asyncio.TimeoutError:
-        logger.warning(f"Nominatim search timed out (>2.0s) for query='{query}'")
-        return []
-    except (httpx.TimeoutException, httpx.ConnectError, httpx.ConnectTimeout) as net_err:
-        logger.warning(f"Nominatim network/connection error for query='{query}': {net_err}")
+        data = await asyncio.wait_for(_do_search(), timeout=_NOMINATIM_TOTAL_TIMEOUT_S)
+        _cache_set(cache_key, data)
+        return [dict(item) for item in data if isinstance(item, dict)]
+    except (asyncio.TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
+        logger.warning("Nominatim search unavailable for query=%r: %s", query, exc)
         return []
     except Exception as exc:
-        logger.warning(f"Nominatim unexpected error for query='{query}': {exc}")
+        logger.warning("Nominatim unexpected search error for query=%r: %s", query, exc)
         return []
 
 
 async def _fetch_nominatim_reverse(lat: float, lon: float) -> Optional[Dict[str, Any]]:
-    """
-    Safely reverse-geocode via OpenStreetMap Nominatim with bounded connect and total timeouts.
-    Guaranteed never to hang or raise unhandled exceptions.
-    """
-    headers = {
-        "User-Agent": "AGROSCOPE-AI/1.0 (NASA Space Apps Challenge 2026; Agricultural Earth Intelligence; mailto:agroscope-ai@nasa.gov)",
-        "Accept-Language": "en",
-        "Accept": "application/json",
-    }
+    """Reverse-geocode with short-lived caching, 1 req/s gate and bounded timeouts."""
+    cache_key = ("reverse", round(lat, 4), round(lon, 4))
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
+    headers = {"User-Agent": _NOMINATIM_USER_AGENT, "Accept-Language": "en", "Accept": "application/json"}
     params = {"lat": lat, "lon": lon, "format": "json", "addressdetails": 1}
-    timeout_cfg = httpx.Timeout(timeout=1.8, connect=0.8, read=1.2, write=0.5, pool=0.5)
+    timeout_cfg = httpx.Timeout(timeout=5.0, connect=1.0, read=3.0, write=0.5, pool=0.5)
 
     async def _do_reverse() -> Optional[Dict[str, Any]]:
-        async with httpx.AsyncClient(
-            timeout=timeout_cfg,
-            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5)
-        ) as client:
-            resp = await client.get(
-                "https://nominatim.openstreetmap.org/reverse",
-                params=params,
-                headers=headers,
-            )
-            if resp.status_code == 200:
-                try:
-                    data = resp.json()
-                    if isinstance(data, dict):
-                        return data
-                except Exception as json_err:
-                    logger.warning(f"Nominatim reverse returned malformed JSON: {json_err}")
-            else:
-                logger.warning(f"Nominatim reverse returned HTTP {resp.status_code} for ({lat}, {lon})")
-            return None
+        await asyncio.to_thread(_wait_for_nominatim_slot)
+        async with httpx.AsyncClient(timeout=timeout_cfg, limits=httpx.Limits(max_connections=1, max_keepalive_connections=1)) as client:
+            resp = await client.get("https://nominatim.openstreetmap.org/reverse", params=params, headers=headers)
+            if resp.status_code != 200:
+                logger.warning("Nominatim reverse returned HTTP %s for (%s, %s)", resp.status_code, lat, lon)
+                return None
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                logger.warning("Nominatim reverse returned malformed JSON: %s", exc)
+                return None
+            return data if isinstance(data, dict) else None
 
     try:
-        return await asyncio.wait_for(_do_reverse(), timeout=2.0)
-    except asyncio.TimeoutError:
-        logger.warning(f"Nominatim reverse timed out (>2.0s) for ({lat}, {lon})")
+        data = await asyncio.wait_for(_do_reverse(), timeout=_NOMINATIM_TOTAL_TIMEOUT_S)
+        if data is not None:
+            _cache_set(cache_key, data)
+            return dict(data)
         return None
-    except (httpx.TimeoutException, httpx.ConnectError, httpx.ConnectTimeout) as net_err:
-        logger.warning(f"Nominatim reverse network error for ({lat}, {lon}): {net_err}")
+    except (asyncio.TimeoutError, httpx.TimeoutException, httpx.TransportError) as exc:
+        logger.warning("Nominatim reverse unavailable for (%s, %s): %s", lat, lon, exc)
         return None
     except Exception as exc:
-        logger.warning(f"Nominatim reverse unexpected error for ({lat}, {lon}): {exc}")
+        logger.warning("Nominatim unexpected reverse error for (%s, %s): %s", lat, lon, exc)
         return None
 
 
@@ -595,9 +631,10 @@ async def geocode_location(
     Supports:
       1. Coordinate parsing (e.g. '19.076, 72.877')
       2. Fast offline gazetteer matching for instant resilience (e.g. 'Mumbai')
-      3. OpenStreetMap Nominatim search with bounded connect/total timeouts
+      3. OpenStreetMap Nominatim search for unresolved or broad-country queries
       Guarantees:
-      - Always returns a response within <= 2.0s.
+      - Upstream requests are cached and rate-limited to one per 1.05 seconds per process.
+      - Always returns a bounded response.
       - Never hangs or leaves requests pending.
       - Never substitutes Punjab or unrelated benchmark coordinates when lookup fails.
     """
@@ -648,7 +685,12 @@ async def geocode_location(
                 "source": g["source"],
             })
 
-    # 3. Query OpenStreetMap Nominatim with strict bounded timeout
+    # Curated locality matches are complete offline hits; do not call Nominatim.
+    # Broad country discovery still goes upstream for a wider result set.
+    if gaz_matches and not _is_broad_country_query(clean_q):
+        return {"query": clean_q, "count": len(results), "results": results[:10]}
+
+    # Public lookup uses shared caching, rate limiting and a hard timeout.
     nom_data = await _fetch_nominatim_search(clean_q, limit=7)
     for item in nom_data:
         try:
@@ -706,8 +748,8 @@ async def reverse_geocode_location(
     Reverse geocodes latitude/longitude coordinates to an administrative location label.
     Guarantees:
       - Always returns a response within <= 2.0s.
-      - If Nominatim is unavailable, checks nearest gazetteer entry within ~25km,
-        or falls back to an exact coordinate label.
+      - Resolves curated locations locally; unresolved coordinates use cached, rate-limited Nominatim,
+        or fall back to an exact coordinate label.
       - NEVER silently substitutes Punjab or benchmark coordinates.
     """
     final_lat = latitude if latitude is not None else lat
@@ -718,7 +760,27 @@ async def reverse_geocode_location(
     lat_r = round(final_lat, 4)
     lon_r = round(final_lon, 4)
 
-    # 1. Attempt lookup via Nominatim with bounded timeout
+    # 1. Resolve coordinates near a curated point locally before using a public service.
+    best_loc = None
+    min_dist = float("inf")
+    for loc in GLOBAL_GAZETTEER:
+        distance = math.hypot(loc["latitude"] - lat_r, loc["longitude"] - lon_r)
+        if distance < min_dist:
+            min_dist = distance
+            best_loc = loc
+
+    if best_loc and min_dist < 0.25:
+        return {
+            "latitude": lat_r,
+            "longitude": lon_r,
+            "label": best_loc["label"],
+            "place": best_loc["name"],
+            "state": best_loc.get("region", ""),
+            "country": best_loc["country"],
+            "source": "Global Gazetteer",
+        }
+
+    # 2. Only unresolved coordinates require a public reverse-geocoding request.
     nom_data = await _fetch_nominatim_reverse(lat_r, lon_r)
     if nom_data and isinstance(nom_data, dict) and ("address" in nom_data or "display_name" in nom_data):
         addr = nom_data.get("address", {}) if isinstance(nom_data.get("address"), dict) else {}
@@ -743,26 +805,6 @@ async def reverse_geocode_location(
             "state": state,
             "country": country or "Global",
             "source": "OpenStreetMap",
-        }
-
-    # 2. Check if coordinates are near a known gazetteer point within 0.25 deg (~25 km)
-    best_loc = None
-    min_dist = float("inf")
-    for g in GLOBAL_GAZETTEER:
-        dist = math.hypot(g["latitude"] - lat_r, g["longitude"] - lon_r)
-        if dist < min_dist:
-            min_dist = dist
-            best_loc = g
-
-    if best_loc and min_dist < 0.25:
-        return {
-            "latitude": lat_r,
-            "longitude": lon_r,
-            "label": best_loc["label"],
-            "place": best_loc["name"],
-            "state": best_loc.get("region", ""),
-            "country": best_loc["country"],
-            "source": "Global Gazetteer",
         }
 
     # 3. Clean coordinate-based label without benchmark substitution
