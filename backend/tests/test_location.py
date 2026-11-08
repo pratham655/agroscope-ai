@@ -609,5 +609,13 @@ def test_scenarios_reverse_geocode_curated_point_does_not_call_public_nominatim(
 def test_broad_country_query_tokenizer_keeps_multiword_names_intact():
     from app.api import location as location_api
     assert location_api._is_broad_country_query("India") is True
-    assert location_api._is_broad_country_query("United States") is False
+    assert location_api._is_broad_country_query("United States") is True
     assert location_api._is_broad_country_query("Mumbai, India") is False
+
+
+def test_nominatim_cache_enforces_maximum_size():
+    from app.api import location as location_api
+    location_api._nominatim_cache.clear()
+    for index in range(location_api._NOMINATIM_CACHE_MAX_ENTRIES + 25):
+        location_api._cache_set(("test", index), [])
+    assert len(location_api._nominatim_cache) == location_api._NOMINATIM_CACHE_MAX_ENTRIES
