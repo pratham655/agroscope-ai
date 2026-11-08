@@ -54,6 +54,10 @@ class CopilotChatRequest(BaseModel):
         None,
         description="Structured field data from GET /api/advisor/recommendations",
     )
+    change_detection_context: Optional[dict[str, Any]] = Field(
+        None,
+        description="Optional comparison result from GET /api/change-detection/compare",
+    )
 
     @field_validator("question")
     @classmethod
@@ -119,7 +123,7 @@ async def copilot_chat(body: CopilotChatRequest = Body(...)):
         "Copilot request | req=(%s, %s, %s) | q_len=%d | ctx=%s",
         body.requested_latitude, body.requested_longitude,
         body.canonical_location_label, len(body.question),
-        body.advisor_context is not None,
+        body.advisor_context is not None or body.change_detection_context is not None,
     )
 
     # 1. Coordinate Extraction & Mismatch Validation
@@ -172,11 +176,38 @@ async def copilot_chat(body: CopilotChatRequest = Body(...)):
                 location_match=False,
             )
 
+    # Validate optional cross-module comparison independently; never mix locations.
+    change_ctx = body.change_detection_context
+    if change_ctx:
+        change_loc = change_ctx.get("location") or {}
+        try:
+            change_lat = float(change_loc["latitude"])
+            change_lon = float(change_loc["longitude"])
+        except (KeyError, TypeError, ValueError):
+            change_lat = change_lon = None
+        if change_lat is None or change_lon is None:
+            change_ctx = None
+        elif abs(body.requested_latitude - change_lat) > COORD_TOLERANCE or abs(body.requested_longitude - change_lon) > COORD_TOLERANCE:
+            return CopilotChatResponse(
+                reply="The attached historical comparison belongs to a different location. I have excluded it from this answer. Re-run Change Detective for the currently selected location before asking me to compare historical conditions.",
+                model="Location Integrity Engine",
+                ai_powered=False,
+                fallback_reason="Historical comparison location mismatch; comparison context rejected.",
+                mismatch_detected=True,
+                requested_latitude=body.requested_latitude,
+                requested_longitude=body.requested_longitude,
+                canonical_location_label=body.canonical_location_label,
+                data_latitude=change_lat,
+                data_longitude=change_lon,
+                location_match=False,
+            )
+
     # 2. Forward to OpenRouter AI or Rule-Based Fallback
     try:
         raw_reply = await openrouter_chat(
             question=body.question,
             advisor_context=body.advisor_context,
+            change_detection_context=change_ctx,
             requested_latitude=body.requested_latitude,
             requested_longitude=body.requested_longitude,
             canonical_location_label=body.canonical_location_label,
