@@ -42,7 +42,7 @@ _FALLBACK_HEADER = (
 # Pydantic models
 # ---------------------------------------------------------------------------
 class CopilotChatRequest(BaseModel):
-    question: str = Field(..., min_length=3, max_length=_MAX_Q_LEN)
+    question: str = Field(..., min_length=1, max_length=_MAX_Q_LEN)
     requested_latitude: float = Field(..., ge=-90.0, le=90.0)
     requested_longitude: float = Field(..., ge=-180.0, le=180.0)
     canonical_location_label: Optional[str] = Field(None, max_length=200)
@@ -59,6 +59,8 @@ class CopilotChatRequest(BaseModel):
     @classmethod
     def sanitise(cls, v: str) -> str:
         v = v.strip()
+        if not v:
+            raise ValueError("Question cannot be empty.")
         # Normalize whitespace and strip dangerous control characters without corrupting punctuation
         v = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", v)
         v = re.sub(r"\s{3,}", "  ", v)
