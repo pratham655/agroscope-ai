@@ -479,7 +479,7 @@ async def reverse_geocode_location(
             "place": best_loc["name"],
             "state": best_loc.get("region", ""),
             "country": best_loc["country"],
-            "source": "NASA Agricultural Gazetteer",
+            "source": "Global Gazetteer",
         }
 
     # 3. Coordinate label
