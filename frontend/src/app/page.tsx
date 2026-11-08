@@ -1,580 +1,725 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
+  Satellite,
   Globe2,
-  FlaskConical,
-  ScanEye,
-  Brain,
-  MapPin,
   Compass,
-  Droplets,
-  BarChart3,
   ArrowRight,
   ShieldCheck,
   Activity,
+  Layers,
+  Sparkles,
+  Cpu,
+  Droplets,
   Sprout,
+  BarChart3,
+  Clock,
+  ScanEye,
   FileText,
-  ChevronRight,
-  Database,
   Thermometer,
   CloudRain,
-  Clock,
+  Database,
+  ExternalLink,
 } from "lucide-react";
 import { useLocation } from "@/context/LocationContext";
-import { analyzeField, type FieldReport } from "@/lib/api";
 
-// Dynamically load interactive map preview (SSR false for Leaflet compatibility)
-const EarthExplorerMap = dynamic(() => import("@/components/EarthExplorerMap"), {
+// Dynamically load interactive 3D Globe with SSR disabled
+const EarthGlobe3D = dynamic(() => import("@/components/EarthGlobe3D"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[420px] rounded-lg bg-slate-100 flex flex-col items-center justify-center text-slate-500 gap-2 border border-slate-200">
-      <Globe2 className="h-7 w-7 text-emerald-700 animate-spin" />
-      <div className="text-xs font-semibold text-slate-700">Connecting to NASA Global Imagery Browse Services (GIBS)...</div>
-      <div className="text-[11px] text-slate-500 font-mono">Streaming EPSG:3857 Basemap & Satellite Swath</div>
+    <div className="w-full h-[520px] rounded-2xl bg-slate-900 flex flex-col items-center justify-center text-emerald-400 gap-3 border border-slate-700/60 shadow-2xl">
+      <Globe2 className="h-8 w-8 animate-spin text-emerald-400" />
+      <span className="text-xs font-semibold text-slate-300">
+        Initializing Planetary Observation Globe...
+      </span>
     </div>
   ),
 });
 
-interface ModuleCard {
-  id: string;
-  name: string;
-  purpose: string;
-  category: "Core Analytical" | "Simulation & Forecasting" | "Hydrology & Phenology" | "Geospatial";
+interface FeatureCardData {
+  title: string;
+  category: string;
+  description: string;
   href: string;
+  badge: string;
+  gradientClass: string;
+  glowClass: string;
   icon: React.ComponentType<{ className?: string }>;
-  status: string;
-  tag: string;
+  accentColor: string;
+  borderAccent: string;
+  metrics: string[];
 }
 
-const MODULES: ModuleCard[] = [
+const FEATURE_CATALOG: FeatureCardData[] = [
   {
-    id: "field-intelligence",
-    name: "Field Intelligence Engine",
-    purpose: "Multivariate biophysical telemetry, SPI-3 drought calculation & crop suitability ranking.",
-    category: "Core Analytical",
-    href: "/analyze",
-    icon: Activity,
-    status: "Operational",
-    tag: "NASA POWER MERRA-2",
-  },
-  {
-    id: "earth-explorer",
-    name: "Earth Explorer (2D / 3D)",
-    purpose: "Planetary cartographic command center streaming 7 NASA GIBS satellite swaths.",
-    category: "Core Analytical",
+    title: "Earth Explorer",
+    category: "Satellite Telemetry",
+    badge: "2D & 3D Planetary Swaths",
+    description:
+      "Explore high-resolution NASA satellite imagery and planetary observations across 2D cartographic projections and interactive 3D globes.",
     href: "/explorer",
+    gradientClass: "grad-explorer",
+    glowClass: "glow-cyan",
     icon: Globe2,
-    status: "Operational",
-    tag: "MODIS · VIIRS · GPM",
+    accentColor: "from-cyan-400 to-blue-500",
+    borderAccent: "hover:border-cyan-400/60",
+    metrics: ["MODIS Terra & Aqua", "VIIRS NOAA-20", "GPM IMERG Rain", "NDVI & LST"],
   },
   {
-    id: "farmer-copilot",
-    name: "Farmer Action Copilot",
-    purpose: "Evidence-grounded conversational agronomist with strict coordinate verification.",
-    category: "Core Analytical",
+    title: "Field Intelligence Engine",
+    category: "Biophysical Modeling",
+    badge: "Multivariate Telemetry",
+    description:
+      "Analyze multivariate agroclimatic conditions, drought severity indices, thermal units, and heuristic crop suitability for arbitrary global coordinates.",
+    href: "/analyze",
+    gradientClass: "grad-field-intel",
+    glowClass: "glow-emerald",
+    icon: Activity,
+    accentColor: "from-emerald-400 to-teal-400",
+    borderAccent: "hover:border-emerald-400/60",
+    metrics: ["SPI-3 Drought Index", "Root-Zone Wetness", "Cumulative GDD", "Crop Scoring"],
+  },
+  {
+    title: "Farmer Action Copilot",
+    category: "Conversational Intelligence",
+    badge: "Evidence-Grounded AI",
+    description:
+      "Query complex agronomic strategies and receive AI-guided adaptation pathways strictly verified against NASA Earth observations.",
     href: "/advisor",
-    icon: Brain,
-    status: "Active",
-    tag: "OpenRouter LLM",
+    gradientClass: "grad-copilot",
+    glowClass: "glow-indigo",
+    icon: Cpu,
+    accentColor: "from-violet-400 to-indigo-400",
+    borderAccent: "hover:border-purple-400/60",
+    metrics: ["OpenRouter LLM", "0.1° Coordinate Guard", "NASA Data Citation", "Rotation Guidance"],
   },
   {
-    id: "farm-futures",
-    name: "Farm Futures Lab",
-    purpose: "Hydrothermal climate perturbation simulator assessing crop vulnerability shifts.",
-    category: "Simulation & Forecasting",
+    title: "Farm Futures Lab",
+    category: "Climate Simulation",
+    badge: "Scenario Stress Testing",
+    description:
+      "Simulate extreme climate shock scenarios—precipitation deficits, heatwaves, and soil dry spells—to evaluate adaptive crop resilience.",
     href: "/farm-futures",
-    icon: FlaskConical,
-    status: "Operational",
-    tag: "Scenario Modeling",
+    gradientClass: "grad-futures",
+    glowClass: "glow-amber",
+    icon: Sparkles,
+    accentColor: "from-amber-400 to-rose-400",
+    borderAccent: "hover:border-amber-400/60",
+    metrics: ["Precipitation Delta", "Thermal Shift (ΔT)", "Soil Moisture Bias", "Irrigation Toggles"],
   },
   {
-    id: "water-intel",
-    name: "Smart Water Intelligence",
-    purpose: "Root-zone vs. surface wetness fractions and drought wilting point analysis.",
-    category: "Hydrology & Phenology",
+    title: "Smart Water Intelligence",
+    category: "Hydrological Systems",
+    badge: "Root-Zone Soil Moisture",
+    description:
+      "Track precipitation dynamics, dual-depth root-zone wetness, dry spell frequency, and calculate FAO-56 irrigation demands.",
     href: "/water-intel",
+    gradientClass: "grad-water",
+    glowClass: "glow-cyan",
     icon: Droplets,
-    status: "Operational",
-    tag: "SMAP / MERRA-2",
+    accentColor: "from-cyan-400 to-sky-500",
+    borderAccent: "hover:border-cyan-400/60",
+    metrics: ["Root-Zone vs. Surface", "MERRA-2 Hydrology", "SMAP Observation", "FAO-56 Water Need"],
   },
   {
-    id: "phenology-tracker",
-    name: "Crop Phenology Tracker",
-    purpose: "Multi-year vegetation trajectory analysis with green-up and senescence DOY.",
-    category: "Hydrology & Phenology",
+    title: "Crop Phenology Tracker",
+    category: "Vegetation Dynamics",
+    badge: "Canopy Seasonality",
+    description:
+      "Explore seasonal vegetation growth trajectories, Savitzky-Golay smoothed NDVI curves, and inter-annual peak canopy timing.",
     href: "/phenology",
-    icon: BarChart3,
-    status: "Operational",
-    tag: "Savitzky-Golay",
+    gradientClass: "grad-phenology",
+    glowClass: "glow-emerald",
+    icon: Sprout,
+    accentColor: "from-emerald-300 to-lime-400",
+    borderAccent: "hover:border-emerald-400/60",
+    metrics: ["Green-up Onset (DOY)", "Peak Canopy Timing", "Season Length", "Inter-Annual Trends"],
   },
   {
-    id: "risk-radar",
-    name: "Regional Risk Radar",
-    purpose: "Cross-continental agricultural vulnerability index and multi-region comparisons.",
-    category: "Geospatial",
+    title: "Regional Risk Radar",
+    category: "Geographic Vulnerability",
+    badge: "Global Breadbasket Audit",
+    description:
+      "Benchmark agricultural vulnerability across major global agricultural breadbaskets with ranked stress scores and resilient crop portfolios.",
     href: "/risk-radar",
+    gradientClass: "grad-risk",
+    glowClass: "glow-amber",
     icon: Compass,
-    status: "Operational",
-    tag: "Comparative Matrix",
+    accentColor: "from-rose-400 to-amber-400",
+    borderAccent: "hover:border-rose-400/60",
+    metrics: ["Kansas Wheat Belt", "Punjab Basin", "São Paulo Cerrado", "Murray-Darling"],
   },
   {
-    id: "satellite-time-machine",
-    name: "Satellite Time Machine",
-    purpose: "Historical multi-epoch orbital imagery replay and seasonal transition analysis.",
-    category: "Geospatial",
-    href: "/time-machine",
-    icon: Clock,
-    status: "Operational",
-    tag: "2021–Present Archive",
-  },
-  {
-    id: "change-detective",
-    name: "Satellite Change Detective",
-    purpose: "Dual synchronized orbital viewports for comparative anomaly detection.",
-    category: "Geospatial",
+    title: "Satellite Change Detective",
+    category: "Dual-Epoch Analytics",
+    badge: "Synchronized Map Comparison",
+    description:
+      "Compare dual-epoch satellite swaths side-by-side to detect land cover changes, irrigation expansion, or drought progression over time.",
     href: "/change-detective",
+    gradientClass: "grad-change",
+    glowClass: "glow-cyan",
     icon: ScanEye,
-    status: "Operational",
-    tag: "Dual Swath Split",
+    accentColor: "from-sky-400 to-blue-500",
+    borderAccent: "hover:border-sky-400/60",
+    metrics: ["Dual Map Viewports", "Differential Telemetry", "Epoch Comparison", "CSV Export"],
   },
   {
-    id: "field-boundary",
-    name: "Field Boundary Intelligence",
-    purpose: "Vector parcel delineation, polygon drawing, GeoJSON upload & geodesic area.",
-    category: "Geospatial",
+    title: "Field Boundary Intelligence",
+    category: "Vector Parcel GIS",
+    badge: "Polygon Geodesics",
+    description:
+      "Draw custom field boundaries, upload GeoJSON polygons, and extract geodesic acreage, perimeter, and centroid climate overlays.",
     href: "/field-boundary",
-    icon: MapPin,
-    status: "Operational",
-    tag: "Geodesic Hectares",
+    gradientClass: "grad-boundary",
+    glowClass: "glow-emerald",
+    icon: Layers,
+    accentColor: "from-teal-300 to-emerald-400",
+    borderAccent: "hover:border-teal-400/60",
+    metrics: ["Interactive Vector GIS", "WGS-84 Centroid", "Hectare Calculations", "GeoJSON Import/Export"],
   },
   {
-    id: "reports",
-    name: "Agronomic Reports & Export",
-    purpose: "Formal institutional PDF & Markdown documentation with provenance citations.",
-    category: "Core Analytical",
+    title: "Satellite Time Machine",
+    category: "Chronological Sequence",
+    badge: "Orbital Timeline Scrubbing",
+    description:
+      "Travel back through historical satellite observations to inspect annual crop seasons, monsoon arrivals, and weather impacts.",
+    href: "/time-machine",
+    gradientClass: "grad-time",
+    glowClass: "glow-indigo",
+    icon: Clock,
+    accentColor: "from-purple-400 to-indigo-400",
+    borderAccent: "hover:border-purple-400/60",
+    metrics: ["Multi-Year Time Lapse", "Instrument Calibration", "Temporal Sliders", "NASA GIBS Archive"],
+  },
+  {
+    title: "Agricultural Intelligence Reports",
+    category: "Institutional Dossier",
+    badge: "Publication-Grade Export",
+    description:
+      "Generate comprehensive, printable scientific field dossiers with automated executive findings, biophysical tables, and PDF export.",
     href: "/reports",
+    gradientClass: "grad-reports",
+    glowClass: "glow-cyan",
     icon: FileText,
-    status: "Operational",
-    tag: "Institutional Export",
+    accentColor: "from-slate-300 to-sky-400",
+    borderAccent: "hover:border-slate-400/60",
+    metrics: ["Automated Executive Summary", "Vector Charts Included", "Markdown & Print Canvas", "Direct PDF Download"],
   },
 ];
 
 export default function HomePage() {
-  const { currentLocation, formattedCoords, hemisphereLabel, openModal, setLocation, presets } =
-    useLocation();
-  const [telemetry, setTelemetry] = useState<FieldReport | null>(null);
-  const [loadingTelemetry, setLoadingTelemetry] = useState(false);
-  const [telemetryError, setTelemetryError] = useState<string | null>(null);
-  const [obsDate] = useState("2024-06-15");
-
-  // Fetch light telemetry for the active location
-  useEffect(() => {
-    let isCancelled = false;
-    setLoadingTelemetry(true);
-    setTelemetryError(null);
-
-    analyzeField({
-      latitude: currentLocation.latitude,
-      longitude: currentLocation.longitude,
-      startDate: currentLocation.startDate || "2023-01-01",
-      endDate: currentLocation.endDate || "2023-12-31",
-      label: currentLocation.label,
-    })
-      .then((res: FieldReport) => {
-        if (!isCancelled) {
-          setTelemetry(res);
-          setLoadingTelemetry(false);
-        }
-      })
-      .catch((err: Error) => {
-        if (!isCancelled) {
-          setTelemetryError(err?.message || "Telemetry unavailable");
-          setLoadingTelemetry(false);
-        }
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentLocation.latitude, currentLocation.longitude, currentLocation.startDate, currentLocation.endDate, currentLocation.label]);
+  const { setLocation } = useLocation();
 
   return (
-    <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      {/* ── Section A: Compact Workspace Header & Global Target ───────── */}
-      <section className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                NASA Space Apps Challenge 2026 · Field Shift
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="text-[11px] font-medium text-slate-500">
-                Scientific Observational Intelligence
-              </span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-              Global Agricultural Intelligence
-            </h1>
-            <p className="text-sm text-slate-600 max-w-3xl leading-relaxed">
-              Monitor environmental conditions, evaluate agricultural risks, and explore climate adaptation
-              using verified NASA Earth observations, MERRA-2 meteorological reanalysis, and biophysical modeling.
-            </p>
-          </div>
+    <div className="min-h-screen bg-[#F7F8F4] text-slate-900 selection:bg-emerald-100 selection:text-emerald-900">
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 1 — VISUAL HERO
+      ───────────────────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden pt-8 pb-16 lg:pt-16 lg:pb-24 border-b border-slate-200/80 bg-gradient-to-b from-white via-[#F7F8F4] to-[#eef2eb]">
+        {/* Atmospheric Glow Backdrops */}
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-emerald-400/15 blur-3xl pointer-events-none" />
+        <div className="absolute top-10 right-0 w-[500px] h-[500px] rounded-full bg-cyan-400/15 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 left-1/3 w-80 h-80 rounded-full bg-amber-400/10 blur-3xl pointer-events-none" />
 
-          {/* Active Target Selector Card */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-            <div className="flex items-center gap-2.5 px-2">
-              <div className="w-8 h-8 rounded-md bg-[#0d3b2e] flex items-center justify-center text-emerald-400 shrink-0">
-                <MapPin className="w-4 h-4" />
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+            {/* Left Content Column (7 cols) */}
+            <div className="lg:col-span-7 space-y-6">
+              {/* NASA Space Apps 2026 Pill */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-900">
+                  NASA Space Apps Challenge · Field Shift
+                </span>
+                <span className="text-slate-300">|</span>
+                <span className="text-xs font-semibold text-emerald-800">
+                  Global Earth Intelligence
+                </span>
               </div>
-              <div className="min-w-[150px]">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  Target Coordinate
-                </div>
-                <div className="text-xs font-bold text-slate-900 truncate max-w-[180px]">
-                  {currentLocation.label}
-                </div>
-                <div className="text-[10px] font-mono text-slate-500">
-                  {formattedCoords} · {hemisphereLabel}
-                </div>
+
+              {/* Main Headline */}
+              <h1 className="heading-display text-slate-950">
+                Understand Earth. <br />
+                <span className="bg-gradient-to-r from-[#123D2C] via-[#1C9B63] to-[#176B9B] bg-clip-text text-transparent">
+                  Transform Agriculture.
+                </span>
+              </h1>
+
+              {/* Supporting Text */}
+              <p className="text-base sm:text-lg text-slate-600 max-w-2xl leading-relaxed text-balance">
+                Explore our planet through NASA Earth observations, discover agricultural risks, and build
+                climate-resilient farming strategies with intelligent geospatial analysis.
+              </p>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3.5 pt-2">
+                <a
+                  href="#discover"
+                  className="px-6 py-3.5 rounded-xl bg-[#123D2C] hover:bg-[#1a523b] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center gap-2 group cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-emerald-300 group-hover:rotate-12 transition-transform" />
+                  <span>Explore Intelligence</span>
+                  <ArrowRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform" />
+                </a>
+
+                <Link
+                  href="/explorer"
+                  className="px-6 py-3.5 rounded-xl bg-white hover:bg-slate-50 text-slate-900 text-sm font-bold border border-slate-300 shadow-2xs hover:shadow-md transition-all flex items-center gap-2 group"
+                >
+                  <Globe2 className="w-4 h-4 text-[#176B9B] group-hover:scale-110 transition-transform" />
+                  <span>Launch Earth Explorer</span>
+                </Link>
+              </div>
+
+              {/* Live Mission Instruments Bar */}
+              <div className="pt-6 border-t border-slate-200/80 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500">
+                <span className="font-semibold text-slate-700 uppercase tracking-wider text-[11px]">
+                  NASA Integrations:
+                </span>
+                <span className="flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
+                  MODIS Terra / Aqua
+                </span>
+                <span className="flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  MERRA-2 Reanalysis
+                </span>
+                <span className="flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  GPM IMERG Rain
+                </span>
+                <span className="flex items-center gap-1 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  SMAP Soil Moisture
+                </span>
               </div>
             </div>
 
-            <button
-              onClick={openModal}
-              className="px-3 py-2 rounded-md bg-white hover:bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800 transition flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-            >
-              <span>Change Target</span>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-            </button>
+            {/* Right Visual Artwork & Hero Card (5 cols) */}
+            <div className="lg:col-span-5">
+              <div className="relative rounded-2xl p-1 bg-gradient-to-br from-[#1C9B63] via-[#48C9D6] to-[#5554C8] shadow-2xl">
+                <div className="rounded-[14px] bg-slate-950 p-6 text-white space-y-5 overflow-hidden relative">
+                  {/* Atmospheric Glow inside card */}
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
+
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Satellite className="w-5 h-5 text-emerald-400 animate-pulse" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                        Orbital Perspective
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
+                      GIBS WMTS Live
+                    </span>
+                  </div>
+
+                  {/* Atmospheric Geospatial Infographic */}
+                  <div className="space-y-4">
+                    <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 flex items-center gap-1.5">
+                          <CloudRain className="w-3.5 h-3.5 text-cyan-400" />
+                          Precipitation Regime
+                        </span>
+                        <span className="font-mono text-cyan-300 font-bold">GPM IMERG</span>
+                      </div>
+                      <div className="text-sm font-semibold text-slate-200">
+                        Multi-sensor bias-corrected 30-minute global precipitation
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 flex items-center gap-1.5">
+                          <Droplets className="w-3.5 h-3.5 text-emerald-400" />
+                          Root-Zone Hydrology
+                        </span>
+                        <span className="font-mono text-emerald-300 font-bold">MERRA-2 / SMAP</span>
+                      </div>
+                      <div className="text-sm font-semibold text-slate-200">
+                        Dual-depth 0–100 cm soil moisture profile & wilting point bounds
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-400 flex items-center gap-1.5">
+                          <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+                          Thermal Energy (GDD)
+                        </span>
+                        <span className="font-mono text-amber-300 font-bold">NASA POWER</span>
+                      </div>
+                      <div className="text-sm font-semibold text-slate-200">
+                        Growing Degree Days accumulation & heatwave risk detection
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-mono text-[11px]">
+                      Global Resolution: 0.1° / 0.5°
+                    </span>
+                    <Link
+                      href="/analyze"
+                      className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 text-xs transition"
+                    >
+                      <span>Launch Pipeline</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── Section B & C: Global Intelligence Workspace (Map + Telemetry) ─ */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Interactive Earth Observation Map Panel (7 cols) */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <Globe2 className="w-4 h-4 text-[#0d3b2e]" />
-              <h2 className="text-sm font-bold text-slate-900">
-                Orbital Telemetry & Surface Swath
-              </h2>
-              <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
-                Leaflet + NASA GIBS
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Link
-                href="/explorer"
-                className="text-xs font-semibold text-[#0d3b2e] hover:text-emerald-700 flex items-center gap-1 transition"
-              >
-                <span>Full Command Center</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 2 — DISCOVER OUR INTELLIGENCE (11 VIBRANT FEATURE CARDS)
+      ───────────────────────────────────────────────────────────── */}
+      <section id="discover" className="py-20 max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-700">
+            Feature Discovery
           </div>
-
-          {/* Leaflet Map Preview */}
-          <div className="w-full h-[400px] rounded-lg overflow-hidden border border-slate-200">
-            <EarthExplorerMap
-              initialLat={currentLocation.latitude}
-              initialLon={currentLocation.longitude}
-              selectedDate={obsDate}
-              onSelectCoords={(lat, lon) => {
-                setLocation({
-                  latitude: lat,
-                  longitude: lon,
-                  label: `Custom Field (${lat.toFixed(2)}°, ${lon.toFixed(2)}°)`,
-                  source: "map",
-                });
-              }}
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-500">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>Base: OpenStreetMap &bull; Overlay: NASA GIBS EPSG:3857</span>
-            </div>
-            <div className="font-mono">
-              Date: {obsDate} &bull; Pin: {currentLocation.latitude.toFixed(4)}°, {currentLocation.longitude.toFixed(4)}°
-            </div>
-          </div>
+          <h2 className="heading-section text-slate-950">
+            One Planet. Multiple Perspectives.
+          </h2>
+          <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+            Explore the science, intelligence, and Earth observation capabilities transforming
+            agricultural decision-making across the world.
+          </p>
         </div>
 
-        {/* Environmental Overview & Live Biophysical Telemetry (5 cols) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-[#0d3b2e]" />
-                <h2 className="text-sm font-bold text-slate-900">
-                  Biophysical Telemetry Overview
-                </h2>
-              </div>
-              <span className="text-[10px] font-mono text-slate-500">
-                {currentLocation.startDate} → {currentLocation.endDate}
-              </span>
-            </div>
+        {/* 11 Distinct Colourful Feature Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {FEATURE_CATALOG.map((feat) => {
+            const Icon = feat.icon;
+            return (
+              <div
+                key={feat.title}
+                className={`feature-card rounded-2xl border border-slate-200/90 bg-white overflow-hidden flex flex-col justify-between shadow-xs ${feat.borderAccent} ${feat.glowClass}`}
+              >
+                <div>
+                  {/* Card Visual Header with Feature-Specific Gradient */}
+                  <div className={`p-6 text-white ${feat.gradientClass} relative overflow-hidden`}>
+                    <div className="relative z-10 flex items-center justify-between">
+                      <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-white border border-white/25 shadow-xs">
+                        <Icon className="w-5 h-5 text-white" />
+                      </div>
+                      <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-black/25 text-white backdrop-blur-sm border border-white/20">
+                        {feat.category}
+                      </span>
+                    </div>
 
-            {loadingTelemetry ? (
-              <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-2">
-                <Activity className="w-6 h-6 animate-spin text-[#0d3b2e]" />
-                <span className="text-xs">Querying NASA POWER MERRA-2 API...</span>
-              </div>
-            ) : telemetry ? (
-              <div className="space-y-3">
-                {/* Composite Stress Card */}
-                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      Composite Agricultural Stress
+                    <div className="relative z-10 mt-5">
+                      <span className="text-xs font-semibold text-white/80 block">
+                        {feat.badge}
+                      </span>
+                      <h3 className="text-xl font-extrabold text-white tracking-tight mt-0.5">
+                        {feat.title}
+                      </h3>
                     </div>
-                    <div className="text-xl font-bold text-slate-900 mt-0.5">
-                      {telemetry.stress.score} <span className="text-xs text-slate-500 font-normal">/ 100</span>
-                    </div>
-                    <div className="text-xs font-semibold text-slate-700">
-                      Level: <span className="text-emerald-800">{telemetry.stress.level}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[11px] font-medium text-slate-500 block">Drought Index</span>
-                    <span className="text-sm font-bold text-slate-900">
-                      SPI-3: {telemetry.climate.spi_3.recent !== null && telemetry.climate.spi_3.recent !== undefined ? telemetry.climate.spi_3.recent.toFixed(2) : "N/A"}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block font-mono">
-                      {telemetry.stress.note || "Standardized Index"}
-                    </span>
-                  </div>
-                </div>
 
-                {/* 4 Quantitative Biophysical Metrics Grid */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
-                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-medium">
-                      <Thermometer className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Mean 2m Temperature</span>
-                    </div>
-                    <div className="text-base font-bold text-slate-900 mt-1">
-                      {telemetry.climate.temperature.mean.toFixed(1)} °C
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      Trend: {telemetry.climate.temperature.trend?.direction || "Stable"}
-                    </div>
+                    {/* Subtle geometric circle overlay */}
+                    <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-white/10 blur-xl pointer-events-none" />
                   </div>
 
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
-                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-medium">
-                      <CloudRain className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Annual Rainfall</span>
-                    </div>
-                    <div className="text-base font-bold text-slate-900 mt-1">
-                      {telemetry.climate.precipitation.total_mm.toFixed(0)} mm
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      Total Annual Accumulation
-                    </div>
-                  </div>
+                  {/* Card Body Description */}
+                  <div className="p-6 space-y-4">
+                    <p className="text-xs sm:text-sm text-slate-600 leading-relaxed min-h-[4rem]">
+                      {feat.description}
+                    </p>
 
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
-                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-medium">
-                      <Droplets className="w-3.5 h-3.5 text-cyan-600" />
-                      <span>Root-Zone Wetness</span>
-                    </div>
-                    <div className="text-base font-bold text-slate-900 mt-1">
-                      {(telemetry.soil_moisture.analysis.root_zone.mean * 100).toFixed(1)}%
-                    </div>
-                    <div className="text-[10px] text-slate-500 truncate">
-                      {telemetry.soil_moisture.analysis.interpretation}
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded-lg border border-slate-200 bg-white">
-                    <div className="flex items-center gap-1.5 text-slate-500 text-[11px] font-medium">
-                      <Sprout className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Thermal Units (GDD)</span>
-                    </div>
-                    <div className="text-base font-bold text-slate-900 mt-1">
-                      {telemetry.climate.gdd.cumulative.toFixed(0)} GDD
-                    </div>
-                    <div className="text-[10px] text-slate-500">
-                      Base: {telemetry.climate.gdd.t_base}°C &bull; Canopy
+                    {/* Key Technical Signals / Metrics Pills */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {feat.metrics.map((m) => (
+                        <span
+                          key={m}
+                          className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 border border-slate-200"
+                        >
+                          {m}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Top Recommended Rotation Crop */}
-                {telemetry.crop_recommendations && telemetry.crop_recommendations.length > 0 && (
-                  <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50 flex items-center justify-between">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
-                        Top Adaptive Rotation Match
-                      </div>
-                      <div className="text-sm font-bold text-slate-900">
-                        {telemetry.crop_recommendations[0].name}
-                      </div>
-                      <div className="text-[11px] text-slate-600 line-clamp-1">
-                        {telemetry.crop_recommendations[0].benefits?.[0] || "Optimal agroclimatic suitability match"}
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold text-emerald-800 bg-white px-2 py-1 rounded border border-emerald-200">
-                      {telemetry.crop_recommendations[0].score}/100
-                    </span>
-                  </div>
-                )}
-
-                <div className="pt-1 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 text-[11px]">Provenance: NASA POWER MERRA-2 daily</span>
+                {/* Card Action Footer */}
+                <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Full Workspace
+                  </span>
                   <Link
-                    href={`/analyze?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}`}
-                    className="font-semibold text-[#0d3b2e] hover:underline flex items-center gap-1"
+                    href={feat.href}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#123D2C] hover:text-[#1C9B63] transition group"
                   >
-                    <span>Full Scientific Dossier</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span>Launch Feature</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                   </Link>
                 </div>
               </div>
-            ) : (
-              <div className="p-6 text-center text-slate-500 space-y-2">
-                <Database className="w-8 h-8 text-slate-300 mx-auto" />
-                <div className="text-xs">
-                  {telemetryError ? `Data stream notice: ${telemetryError}` : "No telemetry loaded yet."}
-                </div>
-                <Link
-                  href="/analyze"
-                  className="inline-block px-3 py-1.5 rounded-md bg-[#0d3b2e] text-white text-xs font-semibold"
-                >
-                  Run Field Analysis
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* Quick Benchmark Presets */}
-          <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-              Preset Agricultural Benchmarks
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {presets.slice(0, 4).map((p) => (
-                <button
-                  key={p.label}
-                  onClick={() =>
-                    setLocation({
-                      latitude: p.latitude,
-                      longitude: p.longitude,
-                      label: p.label,
-                      name: p.name,
-                      country: p.country,
-                      crop: p.crop,
-                      source: "preset",
-                    })
-                  }
-                  className={`p-2 rounded-md text-left border transition text-xs ${
-                    currentLocation.latitude === p.latitude && currentLocation.longitude === p.longitude
-                      ? "border-emerald-600 bg-emerald-50 text-slate-900 font-semibold"
-                      : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                  }`}
-                >
-                  <div className="font-semibold truncate">{p.name}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{p.country}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Section D: Intelligence Modules Navigation Grid ───────────── */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-bold text-slate-900">Scientific Intelligence Modules</h2>
-            <p className="text-xs text-slate-500">
-              Access specialized analytical workspaces powered by NASA Earth observations and physical models.
-            </p>
-          </div>
-          <span className="text-xs font-mono text-slate-400">11 Workspaces Available</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
-          {MODULES.map((mod) => {
-            const Icon = mod.icon;
-            return (
-              <Link
-                key={mod.id}
-                href={mod.href}
-                className="group p-4 rounded-xl border border-slate-200 bg-white hover:border-slate-300 hover:shadow-xs transition flex flex-col justify-between"
-              >
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 group-hover:bg-[#0d3b2e] group-hover:text-emerald-400 text-slate-700 flex items-center justify-center transition-colors">
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                      {mod.tag}
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#0d3b2e] transition-colors flex items-center justify-between">
-                      <span>{mod.name}</span>
-                      <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#0d3b2e]" />
-                    </h3>
-                    <p className="text-xs text-slate-600 mt-1 leading-relaxed line-clamp-2">
-                      {mod.purpose}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                  <span className="text-slate-400">{mod.category}</span>
-                  <span className="flex items-center gap-1 text-emerald-700 font-medium">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>{mod.status}</span>
-                  </span>
-                </div>
-              </Link>
             );
           })}
         </div>
       </section>
 
-      {/* ── Section E: Earth Observation Provenance & Verification ─────── */}
-      <section className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
-          <div className="flex items-center gap-2 font-bold text-slate-800">
-            <ShieldCheck className="w-4 h-4 text-[#0d3b2e]" />
-            <span>Operational Data Ingestion Standards</span>
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 3 — HOW AGROSCOPE AI WORKS (3-STAGE VISUAL STORYTELLING)
+      ───────────────────────────────────────────────────────────── */}
+      <section className="py-20 bg-white border-y border-slate-200/80">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-bold uppercase tracking-wider text-emerald-900">
+              Scientific Pipeline
+            </div>
+            <h2 className="heading-section text-slate-950">
+              Observe. Anticipate. Adapt.
+            </h2>
+            <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+              From raw satellite radiances to actionable on-farm climate adaptation pathways.
+            </p>
           </div>
-          <span className="font-mono text-[11px] text-slate-500">
-            NASA Space Apps Challenge 2026 &bull; Problem #7 Field Shift
-          </span>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-1">
-          <div>
-            <div className="font-semibold text-slate-800">NASA POWER API</div>
-            <div className="text-[11px] text-slate-500">MERRA-2 atmospheric reanalysis &bull; 0.5° × 0.625° daily resolution</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+            {/* Stage 1: OBSERVE */}
+            <div className="rounded-2xl p-6 sm:p-8 bg-gradient-to-b from-cyan-50/70 to-white border border-cyan-200/80 shadow-xs space-y-4">
+              <div className="w-12 h-12 rounded-xl bg-cyan-600 flex items-center justify-center text-white shadow-md">
+                <Satellite className="w-6 h-6 text-white" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-cyan-800">
+                  Step 01
+                </span>
+                <h3 className="text-xl font-bold text-slate-900">OBSERVE</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Ingest continuous global Earth observation swaths from NASA GIBS, GPM IMERG, and MERRA-2 reanalysis.
+                Capture surface temperatures, solar radiation, rainfall volume, and soil wetness at high temporal frequency.
+              </p>
+              <div className="pt-2 text-xs font-semibold text-cyan-800 flex items-center gap-1">
+                <span>Direct Satellite Observation</span>
+              </div>
+            </div>
+
+            {/* Stage 2: ANTICIPATE */}
+            <div className="rounded-2xl p-6 sm:p-8 bg-gradient-to-b from-amber-50/70 to-white border border-amber-200/80 shadow-xs space-y-4">
+              <div className="w-12 h-12 rounded-xl bg-amber-500 flex items-center justify-center text-white shadow-md">
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                  Step 02
+                </span>
+                <h3 className="text-xl font-bold text-slate-900">ANTICIPATE</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Compute meteorological and hydrological drought stress using Standardized Precipitation Index (SPI-3)
+                and root-zone wilting thresholds. Track GDD accumulation and model climate shock vulnerabilities.
+              </p>
+              <div className="pt-2 text-xs font-semibold text-amber-800 flex items-center gap-1">
+                <span>Biophysical Risk Modeling</span>
+              </div>
+            </div>
+
+            {/* Stage 3: ADAPT */}
+            <div className="rounded-2xl p-6 sm:p-8 bg-gradient-to-b from-emerald-50/70 to-white border border-emerald-200/80 shadow-xs space-y-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-700 flex items-center justify-center text-white shadow-md">
+                <Sprout className="w-6 h-6 text-white" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+                  Step 03
+                </span>
+                <h3 className="text-xl font-bold text-slate-900">ADAPT</h3>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Translate planetary telemetry into evidence-grounded crop rotation choices, deficit irrigation schedules,
+                and conversational agronomic counsel through our OpenRouter AI copilot bounded by observed telemetry.
+              </p>
+              <div className="pt-2 text-xs font-semibold text-emerald-800 flex items-center gap-1">
+                <span>Resilient Agricultural Action</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="font-semibold text-slate-800">NASA GIBS Tile Server</div>
-            <div className="text-[11px] text-slate-500">MODIS Terra/Aqua & VIIRS &bull; 250m EPSG:3857 Web Mercator</div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 4 — GLOBAL AGRICULTURAL INTELLIGENCE (INTERACTIVE GLOBE)
+      ───────────────────────────────────────────────────────────── */}
+      <section className="py-20 max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="rounded-3xl p-8 sm:p-12 bg-slate-950 text-white shadow-2xl relative overflow-hidden">
+          {/* Subtle background glow */}
+          <div className="absolute top-0 right-1/4 w-96 h-96 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-10 w-96 h-96 rounded-full bg-emerald-500/15 blur-3xl pointer-events-none" />
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+            {/* Left Narrative Column */}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 text-xs font-bold uppercase tracking-wider">
+                Planetary Scale
+              </div>
+
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                Global Agricultural Intelligence Across Every Coordinate.
+              </h2>
+
+              <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+                From the Indo-Gangetic Plains of Punjab to the wheat belts of Kansas, the Cerrado of Brazil,
+                and the Murray-Darling basin of Australia. AGROSCOPE AI eliminates geographic borders
+                with continuous, bias-corrected Earth observations.
+              </p>
+
+              <div className="pt-2">
+                <Link
+                  href="/explorer"
+                  className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-slate-950 font-bold text-sm shadow-lg hover:shadow-cyan-500/25 transition-all group"
+                >
+                  <Globe2 className="w-4 h-4 text-slate-950 group-hover:rotate-45 transition-transform" />
+                  <span>Explore the Earth</span>
+                  <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </div>
+
+              <div className="pt-4 border-t border-slate-800 grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <div className="text-slate-400 font-mono">Global Coverage</div>
+                  <div className="text-base font-bold text-white mt-0.5">85°N to 85°S</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 font-mono">Observation Pipeline</div>
+                  <div className="text-base font-bold text-white mt-0.5">Continuous GIBS WMTS</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Interactive 3D Earth Globe Showcase */}
+            <div className="lg:col-span-7">
+              <div className="rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
+                <EarthGlobe3D
+                  className="w-full h-[520px]"
+                  onSelectSite={(site) => {
+                    setLocation({
+                      latitude: site.lat,
+                      longitude: site.lon,
+                      label: `${site.name}, ${site.country}`,
+                      crop: site.crop,
+                      source: "map",
+                    });
+                  }}
+                />
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="font-semibold text-slate-800">GPM IMERG Radiometry</div>
-            <div className="text-[11px] text-slate-500">Multi-satellite precipitation calibration &bull; 0.1° half-hourly</div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 5 — NASA AND SCIENTIFIC FOUNDATION
+      ───────────────────────────────────────────────────────────── */}
+      <section className="py-20 bg-white border-t border-slate-200/80">
+        <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto space-y-3 mb-14">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-bold uppercase tracking-wider text-slate-700">
+              Rigorous Provenance
+            </div>
+            <h2 className="heading-section text-slate-950">
+              NASA & Scientific Foundation
+            </h2>
+            <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+              Transparent demarcation between direct satellite radiances, numerical reanalysis models, and derived biophysical indicators.
+            </p>
           </div>
-          <div>
-            <div className="font-semibold text-slate-800">SMAP / GWET Hydrology</div>
-            <div className="text-[11px] text-slate-500">0–5cm Surface & 0–100cm Root-Zone soil wetness fraction</div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                <Database className="w-4 h-4 text-emerald-700" />
+                <span>1. Direct Satellite Observations</span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Raw orbital radiometer observations captured by MODIS Terra, MODIS Aqua, and VIIRS NOAA-20.
+                Served as standardized EPSG:3857 WMTS tiles via NASA GIBS for TrueColor and false-color Bands 7-2-1.
+              </p>
+              <div className="text-[11px] font-mono text-slate-500 pt-1">
+                Resolution: 250m–1km · Latency: ~3–5 hours
+              </div>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center gap-2 text-cyan-800 font-bold text-sm">
+                <Activity className="w-4 h-4 text-cyan-700" />
+                <span>2. Numerical Reanalysis Products</span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                NASA MERRA-2 (Modern-Era Retrospective analysis for Research and Applications) combining satellite
+                soundings with atmospheric general circulation models (GMAO) for surface precipitation and soil wetness.
+              </p>
+              <div className="text-[11px] font-mono text-slate-500 pt-1">
+                Grid: ~0.5° × 0.625° (~55 km) · NASA POWER API
+              </div>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center gap-2 text-purple-800 font-bold text-sm">
+                <ShieldCheck className="w-4 h-4 text-purple-700" />
+                <span>3. Derived Biophysical Indices</span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Peer-reviewed scientific formulations including McKee et al. Standardized Precipitation Index (SPI-3),
+                Growing Degree Days (GDD), FAO-56 Penman-Monteith crop water requirements, and Savitzky-Golay smoothed NDVI.
+              </p>
+              <div className="text-[11px] font-mono text-slate-500 pt-1">
+                Open formulas · Zero proprietary black-boxes
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          SECTION 6 — FINAL CALL TO ACTION
+      ───────────────────────────────────────────────────────────── */}
+      <section className="py-24 bg-gradient-to-br from-[#123D2C] via-[#0d2e21] to-[#091f16] text-white relative overflow-hidden">
+        {/* Glow Effects */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-emerald-500/10 blur-3xl pointer-events-none" />
+
+        <div className="max-w-4xl mx-auto px-4 text-center space-y-8 relative z-10">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 text-xs font-bold uppercase tracking-wider">
+            NASA Space Apps Challenge 2026
+          </div>
+
+          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+            Explore the Planet. <br />
+            Understand the Field. <br />
+            <span className="text-emerald-400">Shape the Future.</span>
+          </h2>
+
+          <p className="text-slate-300 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
+            Harness the power of planetary Earth observations to anticipate climate volatility and adapt agricultural
+            production across arbitrary coordinates.
+          </p>
+
+          <div className="pt-4 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              href="/explorer"
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-bold text-base shadow-xl hover:shadow-emerald-400/25 transition-all flex items-center gap-2 group"
+            >
+              <span>Start Exploring</span>
+              <ArrowRight className="w-5 h-5 text-slate-950 group-hover:translate-x-1 transition-transform" />
+            </Link>
+
+            <Link
+              href="/about"
+              className="px-8 py-4 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-base border border-white/20 transition-all flex items-center gap-2"
+            >
+              <ExternalLink className="w-4 h-4 text-emerald-300" />
+              <span>Scientific Documentation</span>
+            </Link>
           </div>
         </div>
       </section>

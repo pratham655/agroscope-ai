@@ -109,6 +109,32 @@ export default function ExplorerPage() {
 
   return (
     <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
+      {/* ── Feature Discovery Banner: Earth Explorer ────────────────── */}
+      <div className="grad-explorer rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-3xl">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm border border-white/30">
+                Planetary Observation Workspace
+              </span>
+              <span className="text-xs text-cyan-200 font-mono">NASA GIBS WMTS Live</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              See Earth From a Different Perspective.
+            </h1>
+            <p className="text-xs sm:text-sm text-cyan-100/90 leading-relaxed">
+              Explore 2D cartographic projections and 3D planetary Earth swaths streaming directly from NASA&apos;s
+              orbital fleet. Switch between MODIS agricultural false-color, VIIRS surface reflectance, GPM precipitation, and monthly NDVI vegetation metrics.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <span className="px-3 py-1.5 rounded-lg bg-black/25 backdrop-blur-md border border-white/20 text-xs font-mono text-cyan-200">
+              EPSG:3857 &bull; 8 NASA Layers
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* ── Top Bar: Compact Title, Active Location, Date & 2D/3D Mode ─── */}
       <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">

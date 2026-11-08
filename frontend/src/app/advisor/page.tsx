@@ -253,7 +253,32 @@ export default function AdvisorPage() {
 
   return (
     <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
-      {/* ── Top Bar: Compact Title & Status ──────────────────────────── */}
+      {/* ── Feature Discovery Banner: Farmer Action Copilot ─────────── */}
+      <div className="grad-copilot rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-3xl">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm border border-white/30">
+                Conversational Agronomic Workspace
+              </span>
+              <span className="text-xs text-purple-200 font-mono">OpenRouter LLM · Strict 0.1° Guard</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              Evidence-Grounded AI Farming Advisor
+            </h1>
+            <p className="text-xs sm:text-sm text-purple-100/90 leading-relaxed">
+              Consult with an agronomic copilot bounded strictly by empirical NASA Earth observations. Query crop rotation viability, deficit irrigation strategies, and heat stress mitigation with transparent data citation.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <span className="px-3 py-1.5 rounded-lg bg-black/25 backdrop-blur-md border border-white/20 text-xs font-mono text-purple-200">
+              {copilotStatus?.ai_powered ? "AI Active" : "Rules Engine"} · Zero Stale Telemetry
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Top Bar: Compact Status & Sync ──────────────────────────── */}
       <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-[#0d3b2e] flex items-center justify-center text-emerald-400 shrink-0">

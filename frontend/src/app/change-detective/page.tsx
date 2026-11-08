@@ -145,43 +145,43 @@ export default function ChangeDetectivePage() {
 
   return (
     <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
-      {/* ── Top Bar: Page Header ────────────────────────────────────── */}
-      <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#0d3b2e] text-emerald-400">
-              <ScanEye className="h-4 w-4" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Satellite Change Detective
+      {/* ── Feature Discovery Banner: Satellite Change Detective ───── */}
+      <div className="grad-change rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-3xl">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm border border-white/30">
+                Multi-Epoch Observation Workspace
+              </span>
+              <span className="text-xs text-sky-200 font-mono">Synchronized Viewports · Differential Analytics</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              Satellite Change Detective & Multi-Epoch Comparison
             </h1>
-            <span className="text-[10px] font-semibold uppercase text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-              Multi-Epoch Differential Audit
-            </span>
+            <p className="text-xs sm:text-sm text-sky-100/90 leading-relaxed">
+              Synchronized comparative satellite imagery and biophysical telemetry across two observation epochs. Isolate drought degradation, vegetation recovery, hydrothermal anomalies, and phenological shifts with tabular differential metrics.
+            </p>
           </div>
-          <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
-            Synchronized comparative satellite imagery and biophysical telemetry across two observation epochs.
-            Isolate drought degradation, vegetation recovery, hydrothermal anomalies, and phenological shifts.
-          </p>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={runComparison}
+              disabled={loading}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-900 text-xs font-bold shadow-md hover:shadow-lg transition disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <Globe2 className="h-3.5 w-3.5 animate-spin text-sky-600" />
+                  <span>Synchronizing Imagery...</span>
+                </>
+              ) : (
+                <>
+                  <ScanEye className="h-3.5 w-3.5 text-sky-600" />
+                  <span>Execute Multi-Epoch Audit</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
-
-        <button
-          onClick={runComparison}
-          disabled={loading}
-          className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#0d3b2e] hover:bg-[#134e39] text-white text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer shrink-0"
-        >
-          {loading ? (
-            <>
-              <Globe2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-              <span>Synchronizing Imagery...</span>
-            </>
-          ) : (
-            <>
-              <ScanEye className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Execute Multi-Epoch Audit</span>
-            </>
-          )}
-        </button>
       </div>
 
       {/* ── Configuration Console ────────────────────────────────────── */}

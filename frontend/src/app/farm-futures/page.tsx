@@ -169,44 +169,42 @@ export default function FarmFuturesPage() {
 
   return (
     <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
-      {/* ── Top Bar: Page Header ────────────────────────────────────── */}
-      <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#0d3b2e] text-emerald-400">
-              <FlaskConical className="h-4 w-4" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Farm Futures Lab
+      {/* ── Feature Discovery Banner: Farm Futures Lab ──────────────── */}
+      <div className="grad-futures rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-3xl">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm border border-white/30">
+                Climate Shock Laboratory
+              </span>
+              <span className="text-xs text-amber-200 font-mono">MERRA-2 Baselines &bull; Bioclimatic Perturbations</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              Farm Futures Climate Stress Testing
             </h1>
-            <span className="text-[10px] font-semibold uppercase text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-              Bioclimatic Sensitivity Modeling
-            </span>
+            <p className="text-xs sm:text-sm text-amber-100/90 leading-relaxed">
+              Model severe rainfall deficits (-80% to +100%), temperature heatwaves (-4°C to +6°C), and root-zone dry spells against NASA historical baselines to simulate adaptive crop rotation viability and yield sensitivity.
+            </p>
           </div>
-          <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
-            Simulate hypothetical shifts in rainfall deficit (-80% to +100%), thermal accumulation (-4°C to +6°C), and root-zone moisture
-            against NASA MERRA-2 historical baselines to evaluate crop rotation viability.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={runSimulation}
-            disabled={loading || !!coordError}
-            className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#0d3b2e] hover:bg-[#134e39] text-white text-xs font-semibold shadow-2xs transition disabled:opacity-50 cursor-pointer"
-          >
-            {loading ? (
-              <>
-                <Globe2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-                <span>Computing Perturbation...</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-white" />
-                <span>Execute Simulation</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={runSimulation}
+              disabled={loading || !!coordError}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-slate-50 text-slate-900 text-xs font-bold shadow-md hover:shadow-lg transition disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? (
+                <>
+                  <Globe2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                  <span>Simulating Shocks...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-[#d9532f] text-[#d9532f]" />
+                  <span>Execute Simulation</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 

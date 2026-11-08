@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import {
-  Droplets,
   AlertTriangle,
   Waves,
   ShieldCheck,
@@ -108,28 +107,28 @@ export default function WaterIntelPage() {
 
   return (
     <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
-      {/* ── Top Bar: Page Header ────────────────────────────────────── */}
-      <div className="bg-white rounded-xl p-4 sm:p-5 border border-slate-200 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#0d3b2e] text-emerald-400">
-              <Droplets className="h-4 w-4" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Smart Water Intelligence
+      {/* ── Feature Discovery Banner: Smart Water Intelligence ───────── */}
+      <div className="grad-water rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1.5 max-w-3xl">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-white/20 text-white backdrop-blur-sm border border-white/30">
+                Hydrological Precision Workspace
+              </span>
+              <span className="text-xs text-cyan-200 font-mono">MERRA-2 · SMAP Hydrology · FAO-56</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+              Root-Zone Moisture & Irrigation Intelligence
             </h1>
-            <span className="text-[10px] font-semibold uppercase text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-              Root-Zone Hydrology & Drought
+            <p className="text-xs sm:text-sm text-cyan-100/90 leading-relaxed">
+              Track 0–100 cm root-zone soil wetness, surface evaporation losses, and meteorological dry spells to guide precision deficit irrigation schedules and avoid irreversible wilting stress.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <span className="px-3 py-1.5 rounded-lg bg-black/25 backdrop-blur-md border border-white/20 text-xs font-mono text-cyan-200">
+              GWETROOT / GWETTOP &bull; Daily Inflow
             </span>
           </div>
-          <p className="text-xs text-slate-500 max-w-3xl leading-relaxed">
-            Quantitative root-zone soil wetness telemetry, root-profile depletion thresholds, and precipitation deficit anomalies to guide precision irrigation scheduling and anticipate crop water stress.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs text-slate-500 font-medium shrink-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-500" />
-          <span>SMAP · NASA POWER MERRA-2 (GWETROOT / GWETTOP)</span>
         </div>
       </div>
 
