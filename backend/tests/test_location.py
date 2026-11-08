@@ -346,7 +346,14 @@ def test_response_latency_bounds(monkeypatch):
       - /api/location/reverse-geocode (coordinate math fallback): < 100ms
     """
     from app.api import location as location_api
-    monkeypatch.setattr(location_api, "_NOMINATIM_MIN_INTERVAL_S", 0)
+
+    async def no_rate_limit_wait():
+        return None
+
+    # This test measures endpoint overhead, not the intentional public-service
+    # pacing policy. Stub the gate itself to avoid global clock/lock state leaking
+    # from earlier tests into these latency measurements.
+    monkeypatch.setattr(location_api, "_wait_for_nominatim_slot", no_rate_limit_wait)
 
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         req = httpx.Request("GET", "https://nominatim.openstreetmap.org/search")
