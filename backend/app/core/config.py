@@ -20,9 +20,9 @@ class Settings(BaseSettings):
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     # Maximum tokens the model may generate per response
-    OPENROUTER_MAX_TOKENS: int = 800
+    OPENROUTER_MAX_TOKENS: int = 1800
     # HTTP timeout for the OpenRouter request (seconds)
-    OPENROUTER_TIMEOUT_S: float = 30.0
+    OPENROUTER_TIMEOUT_S: float = 60.0
 
     # CORS — add your Vercel / local frontend origin
     ALLOWED_ORIGINS: List[str] = [

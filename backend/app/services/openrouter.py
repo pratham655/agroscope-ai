@@ -80,7 +80,7 @@ _SYSTEM_PROMPT = (
     "   - Use clean, natural paragraphs. Use simple numbered lists (e.g. 1., 2., 3.) when offering step-by-step agronomic recommendations.\n"
     "   - DO NOT use rigid, repetitive boilerplate section headings like 'Evidence from NASA data | Recommendation | Confidence and caveats' or '**Evidence:**' / '**Recommendation:**' on every answer.\n"
     "   - DO NOT output raw internal NASA/model parameter variable names such as GWETROOT, PRECTOTCORR, T2M_MAX, or ALLSKY_SFC_SW_DWN in user responses. Always translate them into plain English concepts: 'root-zone soil wetness fraction', 'daily precipitation', 'daily maximum temperature', 'solar irradiance'.\n"
-    "   - Avoid double-escaped asterisks (\\*\\*), raw backslashes, or unparsed HTML tags. Keep responses clean, focused, and under 350 words.\n"
+    "   - Avoid double-escaped asterisks (\\*\\*), raw backslashes, or unparsed HTML tags. Keep responses clean, focused, and complete and appropriately detailed; for multi-part analytical questions, aim for approximately 500–800 words when warranted. Address every requested part, explain the reasoning behind conclusions, prioritise practical actions, and include meaningful limitations. Finish every section and numbered recommendation; never leave a sentence or list item unfinished. If evidence is insufficient, state that clearly and complete the remaining sections.\n"
 )
 
 
