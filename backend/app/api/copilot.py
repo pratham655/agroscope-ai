@@ -282,15 +282,22 @@ def _rule_based_fallback(
     data_rows = []
     if (v := env.get("temperature_c")) is not None:
         data_rows.append(f"Mean temperature: **{v:.1f} °C** (NASA POWER T2M)")
+    if (v := env.get("heat_stress_assessment")) is not None:
+        data_rows.append(f"Heat stress assessment: **{v}**")
+    else:
+        data_rows.append("Heat stress assessment: **Insufficient data to assess heat stress**")
     if (v := env.get("spi_3_recent")) is not None:
         tag = "near-normal" if abs(v) < 1.0 else ("dry" if v < 0 else "wet")
         data_rows.append(f"SPI-3 drought index: **{v:+.2f}** ({tag})")
     if (v := env.get("root_zone_wetness")) is not None:
-        data_rows.append(f"Root-zone soil wetness: **{v:.3f}** (MERRA-2 proxy, 0–1 scale)")
+        data_rows.append(f"Root-zone soil wetness: **{v:.3f}** (GWETROOT dimensionless degree of saturation 0–1; 0.25=operational wilting proxy)")
     if (v := env.get("total_precip_mm")) is not None:
         data_rows.append(f"Total precipitation: **{v:.0f} mm**")
     if (v := env.get("cumulative_gdd")) is not None:
         data_rows.append(f"Cumulative GDD (base 10 °C): **{v:.0f} °C·days**")
+    if (v := env.get("precip_trend")) is not None:
+        p_disp = env.get("precip_trend_p_display", "")
+        data_rows.append(f"Precipitation trend: **{v}** ({p_disp}, OLS mean trend; does not infer extreme storm frequency)")
 
     if data_rows:
         lines.append("**NASA POWER Data Summary:**")
@@ -309,23 +316,35 @@ def _rule_based_fallback(
         if crops:
             top = crops[0]
             lines.append(
-                f"**Top crop match:** {top.get('name','?')} "
-                f"(suitability score: {top.get('score',0):.2f})"
+                f"**Top crop match (heuristic index):** {top.get('name','?')} "
+                f"(heuristic suitability score: {top.get('score',0):.1f}/100)"
             )
             if len(crops) > 1:
                 lines.append(
-                    f"**Runner-up:** {crops[1].get('name','?')} "
-                    f"(score: {crops[1].get('score',0):.2f})"
+                    f"**Runner-up (heuristic index):** {crops[1].get('name','?')} "
+                    f"(heuristic score: {crops[1].get('score',0):.1f}/100)"
                 )
             lines.append(
-                "\n*Scores are heuristic comparisons based on GDD, "
-                "precipitation and soil wetness thresholds — not validated crop models.*"
+                "\n*Notice: Scores are mathematical heuristic comparisons based on GDD thermal satisfaction (35%), "
+                "precipitation balance (35%), and temperature tolerance (20%) — not validated agronomic yield models.*"
             )
         else:
             lines.append(
                 "Run the field analysis first to generate crop suitability rankings "
                 "for your location."
             )
+
+    elif any(kw in q for kw in ["waterlog", "flood", "drainage"]):
+        swet = env.get("root_zone_wetness")
+        precip = env.get("total_precip_mm")
+        lines.append(
+            "**Waterlogging Risk Assessment (Supporting Indicator):**\n"
+            f"Precipitation ({precip if precip is not None else 'N/A'} mm) and root-zone wetness ({swet if swet is not None else 'N/A'}) "
+            "provide regional supporting context, NOT direct proof of field waterlogging.\n\n"
+            "Coarse-grid reanalysis (~50 km) cannot account for field-level micro-topography, surface depressions, "
+            "soil infiltration rates (clay vs sandy loam), or existing drainage ditches. "
+            "On-site inspection of drainage systems and surface ponding is strictly necessary."
+        )
 
     elif any(kw in q for kw in ["water","irrigat","moisture","drought","dry","rain"]):
         spi = env.get("spi_3_recent")
@@ -338,8 +357,13 @@ def _rule_based_fallback(
             )
         elif swet is not None and swet < 0.25:
             lines.append(
-                "**Low root-zone moisture.** MERRA-2 soil wetness below 0.25. "
-                "Consider supplemental irrigation and monitor crop water stress closely."
+                f"**Low root-zone moisture ({swet:.3f}).** Value is below the operational 0.25 threshold "
+                "(proxy for permanent wilting point). Consider supplemental irrigation."
+            )
+        elif swet is not None and 0.40 <= swet <= 0.75:
+            lines.append(
+                f"**Adequate root-zone soil moisture ({swet:.3f}).** Values between 0.40 and 0.75 represent "
+                "favorable plant-available moisture under normal field capacity (not waterlogging or drought)."
             )
         else:
             lines.append(
@@ -348,17 +372,26 @@ def _rule_based_fallback(
             )
 
     elif any(kw in q for kw in ["heat","temperature","hot","warm"]):
-        anom = env.get("temp_anomaly_c")
-        if anom is not None and anom > 1.5:
+        heat_desc = env.get("heat_stress_assessment")
+        heat_status = env.get("heat_stress_status")
+        days_35 = env.get("heat_stress_days_35c")
+        max_t = env.get("max_tmax_c")
+
+        if heat_status == "insufficient_data" or not heat_desc:
             lines.append(
-                f"**Heat signal present.** Temperature is {anom:+.1f} °C above the period mean. "
-                "Consider earlier planting to avoid peak heat during flowering, "
-                "or investigate locally-tested heat-tolerant varieties."
+                "**Heat stress assessment:** Insufficient data to assess heat stress. "
+                "NASA POWER daily maximum temperature (T2M_MAX) records are required to evaluate thermal threshold exceedances (>= 35°C) and canopy heat shock."
+            )
+        elif days_35 and days_35 > 0:
+            lines.append(
+                f"**Heat exposure detected:** {heat_desc} (peak {max_t}°C). "
+                "Consider earlier planting to avoid peak heat during flowering, or investigate locally-tested heat-tolerant varieties. "
+                "Note: Soil dry-stress days cannot be used to infer atmospheric thermal stress."
             )
         else:
             lines.append(
-                "No significant heat anomaly detected in current NASA POWER data. "
-                "Monitor growing-degree-day accumulation to track crop development."
+                f"**Heat stress evaluation:** {heat_desc} (peak {max_t}°C). "
+                "Zero days exceeded 35°C critical threshold. Note: Thermal evaluation is decoupled from soil moisture."
             )
 
     elif any(kw in q for kw in ["soil","compost","organic","nitrogen","legume"]):

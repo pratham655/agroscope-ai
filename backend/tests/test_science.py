@@ -19,6 +19,7 @@ from app.services.science import (
     calculate_spi, interpret_spi,
     analyze_soil_moisture, compute_stress_score,
     linear_trend, score_crop_rotation,
+    analyze_heat_stress,
     CROP_PROFILES,
 )
 
@@ -120,6 +121,48 @@ class TestGDD:
         assert cum[3] == cum[1]
 
 
+# ─── Heat Stress (Decoupled from Soil Moisture) ───────────────────────────────
+
+class TestHeatStress:
+    def test_missing_heat_inputs_produces_uncertainty_statement(self):
+        """Missing or insufficient temperature inputs must return uncertainty, not an unsupported claim."""
+        res_empty = analyze_heat_stress([])
+        assert res_empty["status"] == "insufficient_data"
+        assert "Insufficient data to assess heat stress" in res_empty["assessment"]
+
+        res_few = analyze_heat_stress([32.0, None, 30.0])
+        assert res_few["status"] == "insufficient_data"
+        assert "Insufficient data to assess heat stress" in res_few["assessment"]
+
+    def test_zero_dry_stress_days_with_high_temp_still_heat_stressed(self):
+        """Zero soil water stress (GWETROOT adequate) with high ambient temperatures must NOT mean zero heat stress."""
+        # 20 days with T_max = 38°C (critical heat shock for crops)
+        t_max_series = [38.0] * 20
+        res = analyze_heat_stress(t_max_series, heat_threshold_c=35.0)
+        assert res["status"] == "evaluated"
+        assert res["is_heat_stressed"] is True
+        assert res["heat_stress_days_35c"] == 20
+        assert res["max_tmax_c"] == 38.0
+        assert res["level"] == "High Heat Exposure"
+
+    def test_moderate_heat_exposure(self):
+        t_max_series = [28.0] * 15 + [36.0, 37.0] + [29.0] * 10
+        res = analyze_heat_stress(t_max_series, heat_threshold_c=35.0)
+        assert res["status"] == "evaluated"
+        assert res["is_heat_stressed"] is True
+        assert res["heat_stress_days_35c"] == 2
+        assert res["level"] == "Moderate Heat Exposure"
+
+    def test_low_heat_exposure(self):
+        t_max_series = [22.0, 24.0, 25.0, 23.0, 26.0, 24.0]
+        res = analyze_heat_stress(t_max_series, heat_threshold_c=35.0)
+        assert res["status"] == "evaluated"
+        assert res["is_heat_stressed"] is False
+        assert res["heat_stress_days_35c"] == 0
+        assert res["level"] == "Low Heat Exposure"
+
+
+
 # ─── SPI ─────────────────────────────────────────────────────────────────────
 
 class TestSPI:
@@ -180,8 +223,22 @@ class TestSoilMoisture:
 
     def test_output_keys(self):
         result = analyze_soil_moisture([0.4]*10, [0.3]*10)
-        for key in ["surface", "root_zone", "dry_stress_days", "dry_stress_pct", "interpretation", "data_source"]:
+        for key in ["surface", "root_zone", "dry_stress_days", "dry_stress_pct", "interpretation", "data_source", "gwetroot_definition", "threshold_rationale"]:
             assert key in result
+
+    def test_adequate_soil_moisture_not_waterlogging(self):
+        """0.680 soil moisture fraction is adequate plant-available moisture, NOT waterlogging."""
+        result = analyze_soil_moisture([0.5]*30, [0.68]*30)
+        assert result["dry_stress_pct"] == 0.0
+        assert "waterlogging" in result["interpretation"].lower()
+        assert "not indicative of waterlogging" in result["interpretation"].lower()
+
+    def test_high_moisture_requires_drainage_and_topography(self):
+        """Elevated moisture (>0.75) advises that local topography and drainage are required."""
+        result = analyze_soil_moisture([0.8]*30, [0.85]*30)
+        interp = result["interpretation"].lower()
+        assert "topography" in interp or "drainage" in interp
+
 
 
 # ─── Stress Score ─────────────────────────────────────────────────────────────
@@ -247,6 +304,21 @@ class TestLinearTrend:
         # Should not raise; result may or may not be significant
         assert "slope" in result
 
+    def test_p_value_formatting_small(self):
+        """p < 0.001 must be formatted as 'p < 0.001' rather than p=0.000."""
+        data = [float(x) for x in range(1, 100)]
+        result = linear_trend(data)
+        assert result["p_value"] < 0.001
+        assert result["p_display"] == "p < 0.001"
+
+    def test_extreme_event_disclaimer(self):
+        """Increasing mean rainfall trend must not imply extreme event increases."""
+        data = [float(x) for x in range(1, 50)]
+        result = linear_trend(data, unit_name="mm")
+        assert "extreme_event_disclaimer" in result
+        assert "extreme rainfall" in result["extreme_event_disclaimer"].lower()
+        assert "mm per time-step (day)" in result["slope_units"]
+
 
 # ─── Crop Rotation Scoring ────────────────────────────────────────────────────
 
@@ -254,6 +326,18 @@ class TestCropRotation:
     def test_returns_all_crops(self):
         results = score_crop_rotation(800, 400, 0.4, 18, 40)
         assert len(results) == len(CROP_PROFILES)
+
+    def test_heuristic_attributes_and_contributing_factors(self):
+        """Crop suitability scores must be explicitly labeled heuristic with environmental factor breakdown."""
+        results = score_crop_rotation(1000, 450, 0.5, 24, 30)
+        for r in results:
+            assert r["is_heuristic"] is True
+            assert "Heuristic" in r["heuristic_label"]
+            factors = r["contributing_factors"]
+            assert "gdd_satisfaction_score" in factors
+            assert "water_balance_score" in factors
+            assert "temperature_tolerance_score" in factors
+            assert "stress_penalty_factor" in factors
 
     def test_sorted_descending(self):
         results = score_crop_rotation(1200, 500, 0.5, 22, 30)

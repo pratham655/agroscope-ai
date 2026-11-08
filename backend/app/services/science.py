@@ -147,6 +147,107 @@ def cumulative_gdd(t_max_series: List[Optional[float]], t_min_series: List[Optio
     return np.cumsum(gdds).tolist()
 
 
+# ─── Heat Stress Analysis (Decoupled from Soil Moisture) ───────────────────────
+
+def analyze_heat_stress(
+    t2m_max_series: List[Optional[float]],
+    t2m_series: Optional[List[Optional[float]]] = None,
+    heat_threshold_c: float = 35.0,
+    moderate_threshold_c: float = 30.0,
+) -> Dict[str, Any]:
+    """
+    Independent heat stress evaluation based strictly on temperature data (T2M_MAX / T2M).
+
+    Strictly decoupled from soil moisture and water deficit metrics.
+    Dry-stress days (GWETROOT < 0.25) must NEVER be used to evaluate atmospheric heat stress.
+
+    Evaluates:
+      - Extreme heat days: daily T_max >= heat_threshold_c (default 35°C; threshold for pollen sterility).
+      - Moderate heat days: daily T_max >= moderate_threshold_c (default 30°C).
+      - Peak maximum temperature (highest observed T_max).
+      - Mean maximum temperature.
+      - Temperature anomaly if T2M mean series is provided.
+
+    If data is missing or contains fewer than 5 valid readings, returns an uncertainty statement:
+    "Insufficient data to assess heat stress".
+    """
+    clean_max = [
+        float(v) for v in t2m_max_series
+        if v is not None and not np.isnan(float(v)) and float(v) > -900
+    ]
+    if len(clean_max) < 5:
+        return {
+            "status": "insufficient_data",
+            "assessment": "Insufficient data to assess heat stress",
+            "heat_stress_days_35c": None,
+            "moderate_heat_days_30c": None,
+            "max_tmax_c": None,
+            "mean_tmax_c": None,
+            "thermal_anomaly_c": None,
+            "level": "Insufficient Data",
+            "is_heat_stressed": False,
+            "data_source": "NASA POWER T2M_MAX (daily maximum 2m air temperature)",
+        }
+
+    arr_max = np.array(clean_max)
+    days_35 = int(np.sum(arr_max >= heat_threshold_c))
+    days_30 = int(np.sum(arr_max >= moderate_threshold_c))
+    max_t = round(float(np.max(arr_max)), 1)
+    mean_max_t = round(float(np.mean(arr_max)), 1)
+    pct_35 = round(days_35 / len(arr_max) * 100, 1)
+
+    thermal_anomaly = None
+    if t2m_series:
+        clean_mean = [
+            float(v) for v in t2m_series
+            if v is not None and not np.isnan(float(v)) and float(v) > -900
+        ]
+        if len(clean_mean) >= 30:
+            overall_mean = float(np.mean(clean_mean))
+            recent_mean = float(np.mean(clean_mean[-30:]))
+            thermal_anomaly = round(recent_mean - overall_mean, 2)
+
+    is_stressed = bool(days_35 > 0 or (thermal_anomaly is not None and thermal_anomaly >= 2.0))
+
+    if days_35 > 10 or pct_35 > 15:
+        level = "High Heat Exposure"
+        assessment = (
+            f"Severe heat exposure: {days_35} days ({pct_35}% of period) exceeded {heat_threshold_c}°C, "
+            f"reaching a peak of {max_t}°C. Critical risk for flowering abortion and thermal shock."
+        )
+    elif days_35 > 0:
+        level = "Moderate Heat Exposure"
+        assessment = (
+            f"Moderate heat exposure: {days_35} days reached or exceeded {heat_threshold_c}°C with "
+            f"peak maximum temperature of {max_t}°C."
+        )
+    elif days_30 > 15:
+        level = "Mild Thermal Elevation"
+        assessment = (
+            f"Elevated temperatures: {days_30} days reached {moderate_threshold_c}°C, "
+            f"but 0 days exceeded {heat_threshold_c}°C (peak maximum: {max_t}°C)."
+        )
+    else:
+        level = "Low Heat Exposure"
+        assessment = (
+            f"No critical heat stress days (T_max >= {heat_threshold_c}°C) detected in temperature data. "
+            f"Peak maximum temperature was {max_t}°C."
+        )
+
+    return {
+        "status": "evaluated",
+        "level": level,
+        "assessment": assessment,
+        "heat_stress_days_35c": days_35,
+        "moderate_heat_days_30c": days_30,
+        "max_tmax_c": max_t,
+        "mean_tmax_c": mean_max_t,
+        "thermal_anomaly_c": thermal_anomaly,
+        "is_heat_stressed": is_stressed,
+        "data_source": "NASA POWER T2M_MAX (daily maximum 2m air temperature)",
+    }
+
+
 # ─── Standardized Precipitation Index (SPI) ──────────────────────────────────
 
 def calculate_spi(precip_series: List[float], timescale: int = 3) -> List[float]:
@@ -245,16 +346,38 @@ def analyze_soil_moisture(
 
     # Flag periods where root-zone wetness drops below critical threshold.
     # DRY_THRESHOLD = 0.25 (GWETROOT fraction, 0–1 scale).
-    # Rationale: MERRA-2 GWETROOT is a soil wetness fraction relative to field
-    # capacity. A value of ~0.25 is commonly cited as a proxy for the permanent
-    # wilting point threshold in coarse-resolution land surface models (GLDAS
-    # community usage; Kumar et al., 2006 JHM). This threshold is an operational
-    # heuristic — it is NOT from a peer-reviewed study specific to MERRA-2 and
-    # should be treated as configurable rather than a validated published value.
+    # Rationale: MERRA-2 GWETROOT is a dimensionless degree of saturation (0.000 to 1.000 scale)
+    # relative to pore saturation in the Catchment Land Surface Model.
+    # An operational threshold of ~0.25 is widely used in land surface modeling (GLDAS/Catchment LSM;
+    # Kumar et al., 2006 JHM) as an operational proxy for permanent wilting point. It is not a universal
+    # crop-specific botanical constant.
     DRY_THRESHOLD = 0.25
     valid_root = root[~np.isnan(root)]
     dry_periods = int(np.sum(valid_root < DRY_THRESHOLD)) if len(valid_root) > 0 else 0
     pct_dry = round(dry_periods / max(len(valid_root), 1) * 100, 1)
+
+    mean_root = root_stats.get("mean")
+    if pct_dry > 25 or (mean_root is not None and mean_root < DRY_THRESHOLD):
+        interp = (
+            f"Significant root-zone soil water deficit: {pct_dry}% of observed days "
+            f"fell below the operational threshold ({DRY_THRESHOLD}), indicating prolonged drought stress."
+        )
+    elif pct_dry > 10:
+        interp = (
+            f"Moderate root-zone soil water deficit: {pct_dry}% of observed days fell below "
+            f"the critical operational threshold ({DRY_THRESHOLD}), suggesting transient water deficit."
+        )
+    elif mean_root is not None and mean_root > 0.75:
+        interp = (
+            f"Elevated root-zone soil wetness (mean {mean_root:.3f}). While favorable for high-water-demand "
+            f"crops, high soil moisture alone is a regional supporting indicator and does not prove "
+            f"waterlogging without field-level topography, drainage, and soil texture inspection."
+        )
+    else:
+        interp = (
+            f"Root-zone soil wetness was generally adequate (mean {mean_root if mean_root is not None else 0.0:.3f}) "
+            f"and within favorable plant-available limits during the observed period (0 dry-stress days; not indicative of waterlogging or drought)."
+        )
 
     return {
         "surface":  top_stats,
@@ -262,13 +385,15 @@ def analyze_soil_moisture(
         "dry_stress_days": dry_periods,
         "dry_stress_pct":  pct_dry,
         "dry_threshold":   DRY_THRESHOLD,
-        "interpretation": (
-            f"{pct_dry}% of observed days show root-zone wetness below "
-            f"the critical threshold ({DRY_THRESHOLD}), suggesting potential "
-            f"water stress during those periods."
-            if pct_dry > 10 else
-            "Root-zone soil wetness was generally adequate during the observed period."
+        "gwetroot_definition": (
+            "Dimensionless degree of saturation (0.000 to 1.000 scale), representing "
+            "root-zone (~0-100 cm) soil wetness relative to pore saturation in the MERRA-2 Catchment Land Surface Model."
         ),
+        "threshold_rationale": (
+            "The 0.25 threshold is an operational model proxy for permanent wilting point derived from "
+            "GLDAS/Catchment LSM usage (Kumar et al., 2006 JHM). It is not a universal physiological constant."
+        ),
+        "interpretation": interp,
         "data_source": "NASA POWER MERRA-2 land surface model (model-derived estimate, not direct observation)",
     }
 
@@ -364,36 +489,50 @@ def _stress_level(score: float) -> Dict[str, str]:
 
 # ─── Climate Trend Analysis ───────────────────────────────────────────────────
 
-def linear_trend(values: List[float], dates: Optional[List[str]] = None) -> Dict[str, Any]:
+def linear_trend(values: List[float], dates: Optional[List[str]] = None, unit_name: str = "units") -> Dict[str, Any]:
     """
-    Fit a linear trend to a time series using Ordinary Least Squares.
+    Fit a linear trend to a time series using Ordinary Least Squares (OLS).
 
-    Returns slope, intercept, R², p-value, and interpretation.
+    Returns slope, intercept, R², p-value, formatted p_display, and interpretation.
     p-value < 0.05 is considered statistically significant at 95% confidence.
     """
     arr = np.array(values, dtype=float)
     valid = ~np.isnan(arr)
     if valid.sum() < 3:
-        return {"slope": None, "r2": None, "p_value": None, "significant": False}
+        return {
+            "slope": None, "r2": None, "p_value": None, "p_display": None,
+            "significant": False, "regression_method": "OLS",
+        }
 
     x = np.arange(len(arr))[valid].astype(float)
     y = arr[valid]
 
     slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+    p_float = float(p_value)
+    p_display = "p < 0.001" if p_float < 0.001 else f"p = {p_float:.3f}"
+    slope_val = round(float(slope), 6)
+    r2_val = round(float(r_value**2), 4)
 
     return {
-        "slope":      round(float(slope),     6),
+        "slope":      slope_val,
         "intercept":  round(float(intercept), 4),
-        "r2":         round(float(r_value**2), 4),
-        "p_value":    round(float(p_value),    4),
-        "std_err":    round(float(std_err),    6),
-        "significant": bool(p_value < 0.05),
+        "r2":         r2_val,
+        "p_value":    round(p_float, 4),
+        "p_display":  p_display,
+        "std_err":    round(float(std_err), 6),
+        "significant": bool(p_float < 0.05),
         "direction":  "increasing" if slope > 0 else "decreasing",
+        "regression_method": "Ordinary Least Squares (OLS) over observation period",
+        "slope_units": f"{unit_name} per time-step (day)",
         "interpretation": (
             f"Statistically significant {'increasing' if slope > 0 else 'decreasing'} trend "
-            f"(p={p_value:.3f}, R²={r_value**2:.3f})."
-            if p_value < 0.05 else
-            f"No statistically significant trend detected (p={p_value:.3f})."
+            f"({p_display}, R²={r2_val:.3f}, OLS slope={slope_val} {unit_name}/day)."
+            if p_float < 0.05 else
+            f"No statistically significant trend detected ({p_display})."
+        ),
+        "extreme_event_disclaimer": (
+            "Linear regression measures the trajectory of mean values over the observation period. "
+            "An increasing mean precipitation trend does NOT infer an increase in extreme rainfall event frequency or storm intensity."
         ),
     }
 
@@ -635,7 +774,15 @@ def score_crop_rotation(
             "crop_id":   crop_id,
             "name":      profile["name"],
             "score":     round(composite, 1),
+            "is_heuristic": True,
+            "heuristic_label": "Heuristic Suitability Index (0–100, NOT a validated yield model)",
             "scores":    {k: round(v, 2) for k, v in scores.items()},
+            "contributing_factors": {
+                "gdd_satisfaction_score": round(scores["gdd"] * 100, 1),
+                "water_balance_score": round(scores["water"] * 100, 1),
+                "temperature_tolerance_score": round(scores["temp"] * 100, 1),
+                "stress_penalty_factor": round(stress_penalty, 2),
+            },
             "benefits":  profile["benefits"],
             "risks":     profile["risks"],
             "gdd_required":   profile["gdd_required"],

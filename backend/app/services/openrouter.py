@@ -24,24 +24,48 @@ _CHAT_URL = f"{settings.OPENROUTER_BASE_URL}/chat/completions"
 _SYSTEM_PROMPT = (
     "You are the AGROSCOPE AI Farmer Action Copilot, a specialised agricultural "
     "intelligence assistant grounded in NASA Earth observation science.\n\n"
-    "Rules you must follow:\n"
+    "SCIENTIFIC REASONING & ACCURACY RULES (MANDATORY):\n"
     "1. Base ALL recommendations on the NASA POWER / MERRA-2 field data provided "
     "in the user context. Never fabricate measurements, forecasts, yield figures, "
     "or satellite observations not present in the data.\n"
-    "2. Clearly label AI-generated recommendations as advisory only.\n"
-    "3. Distinguish between: (a) direct NASA observations, (b) model-derived "
-    "estimates, and (c) your own analytical reasoning.\n"
-    "4. Always state confidence limitations and recommend local agronomic expertise.\n"
-    "5. Vegetation health figures are MERRA-2-derived environmental proxies — "
-    "NOT direct MODIS NDVI measurements. Never call them NDVI.\n"
-    "6. Do NOT provide pesticide doses, medical advice, or precise yield predictions.\n"
-    "7. Keep responses concise and practical (max ~350 words).\n"
-    "8. Structure each response as: Evidence from NASA data | Recommendation | "
-    "Confidence and caveats.\n"
-    "9. You operate globally for arbitrary valid coordinates worldwide. Never assume "
-    "a default geography or benchmark location. Respect the local hemisphere: "
-    "in the Southern Hemisphere (latitude < 0), seasonal cycles are inverted (summer is Dec–Feb, "
-    "winter is Jun–Aug). Tailor all agronomic advice to the specific location and selected crop.\n"
+    "2. SEPARATE HEAT STRESS FROM WATER STRESS:\n"
+    "   - NEVER use dry-stress days or soil moisture as a proxy for heat stress.\n"
+    "   - Dry-stress days measure root-zone soil moisture deficit only (GWETROOT < 0.25).\n"
+    "   - Heat stress must be evaluated strictly from temperature metrics (T2M_MAX, days >= 35°C, "
+    "temperature anomalies vs. baseline). A field can have 0% dry-stress days while experiencing "
+    "severe thermal heat stress.\n"
+    "   - If temperature metrics are missing, return: 'Insufficient data to assess heat stress.' "
+    "Never conclude absence of heat stress without temperature evidence.\n"
+    "3. VALIDATE SOIL MOISTURE INTERPRETATION:\n"
+    "   - GWETROOT is a dimensionless degree of saturation (0.000 to 1.000 scale) in the MERRA-2 "
+    "Catchment Land Surface Model.\n"
+    "   - The 0.25 threshold is an operational model heuristic representing the proxy for permanent wilting point.\n"
+    "   - Values between 0.400 and 0.750 indicate adequate, favorable plant-available root-zone moisture under "
+    "normal field capacity. Do NOT equate 0.60–0.75 with near-saturation, excessive wetness, or waterlogging.\n"
+    "   - Distinguish adequate plant-available soil moisture from waterlogging (which requires prolonged saturation approaching 1.0 and hypoxic root conditions).\n"
+    "4. WATERLOGGING RISK ASSESSMENT:\n"
+    "   - Treat elevated soil moisture and high rainfall as supporting indicators, NOT direct proof of waterlogging.\n"
+    "   - Regional reanalysis data (~50 km grid) cannot establish field-scale waterlogging without accounting for "
+    "local slope, low-lying depressions, soil percolation/texture (clay vs. sandy loam), and drainage infrastructure.\n"
+    "   - Explicitly state that on-site field observation and soil drainage inspection are necessary.\n"
+    "5. PRECIPITATION TREND INTERPRETATION:\n"
+    "   - Precipitation trends are derived from Ordinary Least Squares (OLS) linear regression of daily/monthly means over the observation period.\n"
+    "   - Always format p=0.000 as p < 0.001.\n"
+    "   - NEVER infer an increase in extreme rainfall frequency or storm intensity from an increasing average precipitation trend alone. "
+    "Mean trends do not measure extreme high-intensity events (>50 mm/day).\n"
+    "6. CROP SUITABILITY EXPLANATIONS:\n"
+    "   - Explicitly label crop suitability scores as heuristic suitability indices (0–100 scale).\n"
+    "   - Never present them as validated agronomic models or yield guarantees.\n"
+    "   - Explain the contributing environmental variables: thermal GDD accumulation (35%), water balance (35%), "
+    "temperature tolerance around optimal (20%), and environmental stress penalty.\n"
+    "7. Clearly label AI-generated recommendations as advisory only. Distinguish: (a) direct observations, "
+    "(b) model reanalysis estimates, (c) derived indicators, and (d) heuristic recommendations.\n"
+    "8. Vegetation health figures are MERRA-2-derived environmental proxies — NOT direct MODIS NDVI measurements. Never call them NDVI.\n"
+    "9. Do NOT provide chemical pesticide doses or precise yield predictions.\n"
+    "10. Keep responses concise and practical (max ~350 words). Structure each response as: "
+    "Evidence from NASA data | Recommendation | Confidence and caveats.\n"
+    "11. You operate globally for arbitrary valid coordinates worldwide. Respect the local hemisphere: "
+    "in the Southern Hemisphere (latitude < 0), seasonal cycles are inverted (summer is Dec–Feb, winter is Jun–Aug).\n"
 )
 
 
@@ -121,15 +145,19 @@ def _build_context_block(
         lines.append("")
         lines.append("NASA POWER / MERRA-2 Derived Indicators:")
         mapping = [
-            ("temperature_c",    "Mean temperature (T2M)",       ".1f", "degC"),
-            ("temp_anomaly_c",   "Temperature anomaly",           "+.2f","degC vs period mean"),
+            ("temperature_c",    "Mean temperature (T2M)",       ".1f", "°C"),
+            ("temp_anomaly_c",   "Temperature anomaly",           "+.2f","°C vs period mean"),
             ("total_precip_mm",  "Total precipitation",           ".0f", "mm"),
             ("spi_3_recent",     "SPI-3 drought index",           "+.2f","(<-1=dry, >+1=wet)"),
-            ("root_zone_wetness","Root-zone soil wetness fraction",".3f", "(fraction of saturation, 0.0-1.0 scale; values <0.25 indicate water deficit)"),
-            ("cumulative_gdd",   "Cumulative GDD (base 10 degC)", ".0f", "degC-days"),
-            ("dry_stress_pct",   "Dry-stress days",               ".1f", "%"),
-            ("temp_trend",       "Multi-year temp trend",         None,  ""),
-            ("precip_trend",     "Multi-year precip trend",       None,  ""),
+            ("root_zone_wetness","Root-zone soil wetness fraction",".3f", "(fraction of saturation, 0.0-1.0 scale; values <0.25 indicate water deficit; 0.40–0.75=adequate moisture; not waterlogging)"),
+            ("cumulative_gdd",   "Cumulative GDD (base 10 °C)",   ".0f", "°C·days"),
+            ("dry_stress_pct",   "Soil dry-stress days (GWETROOT < 0.25)", ".1f", "% of days (measures root-zone moisture deficit only, NOT heat stress)"),
+            ("temp_trend",       "Temperature linear trend",      None,  ""),
+            ("precip_trend",     "Precipitation linear trend",    None,  ""),
+            ("precip_trend_p_display", "Precipitation trend p-value", None, "(OLS regression on mean precipitation; does NOT infer extreme storm frequency)"),
+            ("heat_stress_assessment", "Heat stress assessment (T2M_MAX)", None, ""),
+            ("heat_stress_days_35c",   "Extreme heat days (T_max >= 35°C)", None, "days"),
+            ("max_tmax_c",       "Peak maximum temperature (T_max)", ".1f", "°C"),
         ]
         for key, label, fmt, unit in mapping:
             val = env.get(key)
@@ -141,12 +169,18 @@ def _build_context_block(
                 val_str = str(val)
             lines.append(f"  {label}: {val_str} {unit}".rstrip())
 
+    # If heat stress assessment is missing from env context, flag explicitly
+    if env and not env.get("heat_stress_assessment"):
+        lines.append("  Heat stress assessment: Insufficient data to assess heat stress (T2M_MAX missing)")
+
     crops = ctx.get("crop_rotation_ranking", [])
     if crops:
         lines.append("")
-        lines.append("Top crop suitability scores (heuristic, not validated model):")
+        lines.append("Top crop suitability scores (heuristic matching index 0–100, NOT a validated yield model):")
         for c in crops[:3]:
-            lines.append(f"  {c.get('name','?')}: score={c.get('score',0):.2f}")
+            factors = c.get("contributing_factors", {})
+            factor_str = f" [GDD={factors.get('gdd_satisfaction_score', '?')}%, Water={factors.get('water_balance_score', '?')}%, Temp={factors.get('temperature_tolerance_score', '?')}%]" if factors else ""
+            lines.append(f"  {c.get('name','?')}: heuristic score = {c.get('score',0):.1f}/100{factor_str}")
 
     evidence = ctx.get("evidence_summary", [])
     if evidence:
@@ -157,11 +191,12 @@ def _build_context_block(
 
     lines.append("")
     lines.append(
-        "IMPORTANT SCIENTIFIC INTERPRETATION RULES:\n"
-        "- Root-zone soil wetness (GWETROOT) is a physical dimensionless fraction of "
-        "saturation ranging strictly from 0.000 to 1.000 (0 = completely dry, 1 = saturated). "
-        "It is NOT a standardized anomaly or z-score. A value < 0.25 indicates root-zone water stress.\n"
-        "- Vegetation health figures are MERRA-2-derived environmental proxies, NOT direct MODIS NDVI measurements."
+        "CRITICAL SCIENTIFIC INTERPRETATION REMINDERS:\n"
+        "- NEVER confuse dry-stress days with heat stress. Dry-stress days measure root-zone soil water deficit (GWETROOT < 0.25). Heat stress is determined strictly by temperature (T_max >= 35°C, thermal anomalies).\n"
+        "- Root-zone soil wetness (GWETROOT) is a physical dimensionless fraction (0.0 to 1.0). It is NOT a standardized anomaly or z-score. Values around 0.60–0.75 represent adequate plant-available moisture; do NOT claim near-saturation or waterlogging.\n"
+        "- Elevated rainfall or soil wetness does NOT prove waterlogging. Waterlogging is a localized phenomenon requiring field-level inspection of topography (depressions), soil texture/percolation, and drainage.\n"
+        "- Linear precipitation trends reflect OLS trajectories of mean precipitation (report p=0.000 as p < 0.001). They do NOT measure or infer changes in extreme storm frequency or intensity.\n"
+        "- Crop suitability scores are mathematical matching heuristics (0–100), not agronomic yield models."
     )
     lines.append("=================================")
     return "\n".join(lines)

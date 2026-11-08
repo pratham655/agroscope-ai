@@ -369,3 +369,68 @@ class TestCopilotChatEndpoint:
         data = resp.json()
         assert data["mismatch_detected"] is True
         assert "mismatch" in data["fallback_reason"].lower()
+
+    def test_heat_stress_missing_data_uncertainty(self):
+        """Missing heat stress inputs must produce an explicit uncertainty statement."""
+        ctx_no_heat = {
+            "location": {"latitude": 30.73, "longitude": 76.78, "label": "Punjab, India"},
+            "period": {"start": "2023-01-01", "end": "2023-12-31"},
+            "environmental_context": {
+                "temperature_c": 22.5,
+                "temp_anomaly_c": 0.2,
+                "heat_stress_status": "insufficient_data",
+                "heat_stress_assessment": "Insufficient data to assess heat stress",
+            },
+        }
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+            resp = self._post(
+                question="Is there severe heat stress in my field?",
+                ctx=ctx_no_heat,
+                lat=30.73,
+                lon=76.78,
+                label="Punjab, India",
+            )
+        assert resp.status_code == 200
+        reply = resp.json()["reply"]
+        assert "Insufficient data to assess heat stress" in reply
+
+    def test_waterlogging_guidance_cites_field_inspection(self):
+        """Waterlogging queries must emphasize regional indicator limitations and need for field inspection."""
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+            resp = self._post(
+                question="Assess excess rainfall and waterlogging risk for my field.",
+                ctx=_SAMPLE_CTX,
+                lat=30.73,
+                lon=76.78,
+                label="Punjab, India",
+            )
+        assert resp.status_code == 200
+        reply = resp.json()["reply"]
+        assert "Waterlogging Risk Assessment" in reply
+        assert "drainage" in reply.lower()
+        assert "topography" in reply.lower() or "field" in reply.lower()
+
+    def test_soil_moisture_adequate_distinguished_from_waterlogging(self):
+        """0.68 soil moisture fraction must be interpreted as adequate, not waterlogging."""
+        ctx_adequate = {
+            "location": {"latitude": 19.0760, "longitude": 72.8777, "label": "Mumbai, Maharashtra"},
+            "period": {"start": "2023-01-01", "end": "2023-12-31"},
+            "environmental_context": {
+                "root_zone_wetness": 0.68,
+                "spi_3_recent": 0.2,
+                "dry_stress_pct": 0.0,
+            },
+        }
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", ""):
+            resp = self._post(
+                question="What is the soil moisture condition?",
+                ctx=ctx_adequate,
+                lat=19.0760,
+                lon=72.8777,
+                label="Mumbai, Maharashtra",
+            )
+        assert resp.status_code == 200
+        reply = resp.json()["reply"]
+        assert "Adequate root-zone soil moisture" in reply
+        assert "not waterlogging" in reply.lower()
+

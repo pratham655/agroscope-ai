@@ -9,7 +9,7 @@ import logging
 from app.services.nasa_power import fetch_daily_power
 from app.services.science import (
     calculate_spi, analyze_soil_moisture, linear_trend,
-    score_crop_rotation, cumulative_gdd,
+    score_crop_rotation, cumulative_gdd, analyze_heat_stress,
 )
 
 router = APIRouter()
@@ -132,12 +132,14 @@ async def get_recommendations(
     t_recent  = float(np.nanmean(t2m[-30:])) if len(t2m) >= 30 else t_mean
     t_anomaly = t_recent - t_mean
 
+    heat_anal = analyze_heat_stress(t2m_max, t2m)
+
     gdd_cum_vals = cumulative_gdd(t2m_max, t2m_min) if t2m_max and t2m_min else []
     total_gdd    = gdd_cum_vals[-1] if gdd_cum_vals else 0.0
     total_precip = float(np.sum(precip)) if precip else 0.0
 
-    t_trend = linear_trend(t2m)
-    p_trend = linear_trend(precip)
+    t_trend = linear_trend(t2m, unit_name="°C")
+    p_trend = linear_trend(precip, unit_name="mm")
 
     # ── Select applicable strategies ──────────────────────────────────────────
     active_strategies: List[dict] = []
@@ -146,29 +148,43 @@ async def get_recommendations(
     # Always include monitoring
     active_strategies.append(ADAPTATION_STRATEGIES["general_monitoring"])
 
-    # Water deficit
+    # Water deficit (strictly decoupled from heat stress)
     if (not np.isnan(spi3_recent) and spi3_recent < -1.0) or \
        (soil_anal and soil_anal.get("dry_stress_pct", 0) > 15):
         active_strategies.append(ADAPTATION_STRATEGIES["water_deficit"])
         evidence.append(
             f"Water deficit signal: SPI-3 = {spi3_recent:+.2f}, "
-            f"root-zone dry days = {soil_anal.get('dry_stress_days', 'N/A')}"
+            f"root-zone soil water deficit days = {soil_anal.get('dry_stress_days', 'N/A')} "
+            f"(GWETROOT < 0.25 operational wilting proxy; measures soil moisture only, not heat)."
         )
 
-    # Heat stress
-    if t_anomaly > 1.5 or (t_trend.get("significant") and t_trend.get("direction") == "increasing"):
+    # Waterlogging risk: evaluated as supporting condition, NOT direct proof
+    if total_precip > 1200 or (not np.isnan(spi3_recent) and spi3_recent > 1.5) or mean_soil > 0.75:
+        evidence.append(
+            f"Elevated moisture context: Total rainfall {total_precip:.0f} mm, "
+            f"mean root-zone wetness {mean_soil:.3f}. Supporting indicator for potential waterlogging risk; "
+            f"field-level verification of drainage and topography required."
+        )
+
+    # Heat stress: evaluated strictly from temperature data (T2M_MAX / T2M)
+    if heat_anal.get("status") == "evaluated" and heat_anal.get("is_heat_stressed"):
         active_strategies.append(ADAPTATION_STRATEGIES["heat_stress"])
         evidence.append(
-            f"Heat signal: recent temperature {t_recent:.1f}°C "
-            f"({t_anomaly:+.1f}°C vs. period mean)"
+            f"Heat exposure signal: {heat_anal.get('heat_stress_days_35c', 0)} days >= 35°C "
+            f"(peak {heat_anal.get('max_tmax_c')}°C, anomaly {t_anomaly:+.1f}°C vs. period mean). "
+            f"Independent thermal assessment (decoupled from soil moisture)."
         )
+    elif heat_anal.get("status") == "insufficient_data":
+        evidence.append("Heat stress assessment: Insufficient data to assess heat stress.")
 
     # Precipitation variability
     if p_trend.get("significant"):
         active_strategies.append(ADAPTATION_STRATEGIES["precipitation_variability"])
+        p_disp = p_trend.get("p_display", f"p={p_trend.get('p_value', 0):.3f}")
         evidence.append(
             f"Precipitation trend: {p_trend['direction']} "
-            f"(slope={p_trend['slope']:.4f} mm/day², p={p_trend['p_value']:.3f})"
+            f"(slope={p_trend['slope']:.4f} mm/day per day, {p_disp}, OLS mean trend). "
+            f"Does not infer changes in extreme rainfall event frequency."
         )
 
     # Soil health always relevant for crop rotation context
@@ -185,15 +201,21 @@ async def get_recommendations(
 
     # ── Environmental context summary ──────────────────────────────────────────
     context = {
-        "temperature_c":    round(t_mean, 1),
-        "temp_anomaly_c":   round(t_anomaly, 2),
-        "total_precip_mm":  round(total_precip, 1),
-        "spi_3_recent":     round(spi3_recent, 2) if not np.isnan(spi3_recent) else None,
-        "root_zone_wetness":round(mean_soil, 3),
-        "cumulative_gdd":   round(total_gdd, 0),
-        "dry_stress_pct":   soil_anal.get("dry_stress_pct"),
-        "temp_trend":       t_trend.get("direction"),
-        "precip_trend":     p_trend.get("direction"),
+        "temperature_c":        round(t_mean, 1),
+        "temp_anomaly_c":       round(t_anomaly, 2),
+        "total_precip_mm":      round(total_precip, 1),
+        "spi_3_recent":         round(spi3_recent, 2) if not np.isnan(spi3_recent) else None,
+        "root_zone_wetness":    round(mean_soil, 3),
+        "cumulative_gdd":       round(total_gdd, 0),
+        "dry_stress_pct":       soil_anal.get("dry_stress_pct"),
+        "temp_trend":           t_trend.get("direction"),
+        "precip_trend":         p_trend.get("direction"),
+        "precip_trend_p_display": p_trend.get("p_display"),
+        "precip_trend_slope":   p_trend.get("slope"),
+        "heat_stress_assessment": heat_anal.get("assessment"),
+        "heat_stress_status":   heat_anal.get("status"),
+        "heat_stress_days_35c": heat_anal.get("heat_stress_days_35c"),
+        "max_tmax_c":           heat_anal.get("max_tmax_c"),
     }
 
     return {
