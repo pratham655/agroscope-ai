@@ -235,6 +235,7 @@ async def openrouter_chat(
     requested_latitude: float | None = None,
     requested_longitude: float | None = None,
     canonical_location_label: str | None = None,
+    change_detection_context: dict[str, Any] | None = None,
 ) -> str:
     """
     Send a sanitised question to OpenRouter and return the reply text.
@@ -282,6 +283,31 @@ async def openrouter_chat(
         ),
     })
 
+    if change_detection_context:
+        comparison = change_detection_context
+        p1 = comparison.get("period1") or {}
+        p2 = comparison.get("period2") or {}
+        lines = [
+            "=== SATELLITE CHANGE DETECTIVE HISTORICAL COMPARISON ===",
+            f"Location coordinates: {comparison.get('location', {}).get('latitude')}, {comparison.get('location', {}).get('longitude')}",
+            f"Period 1: {p1.get('label', '')} ({p1.get('period_start', '?')} to {p1.get('period_end', '?')})",
+            f"Period 2: {p2.get('label', '')} ({p2.get('period_start', '?')} to {p2.get('period_end', '?')})",
+            f"Demo data: {bool(comparison.get('is_demo'))}",
+            "Period 1 metrics: " + ", ".join(f"{k}={v}" for k, v in p1.items() if isinstance(v, (int, float)) or v is None),
+            "Period 2 metrics: " + ", ".join(f"{k}={v}" for k, v in p2.items() if isinstance(v, (int, float)) or v is None),
+            "Comparison rows:",
+        ]
+        for row in comparison.get("comparison_table", [])[:30]:
+            lines.append(f"- {row.get('indicator')}: period1={row.get('period1_value')}, period2={row.get('period2_value')}, delta={row.get('delta')}, direction={row.get('direction')}")
+        lines.append("Narrative: " + str(comparison.get("narrative", "")))
+        lines.append("Scientific note: " + str(comparison.get("scientific_note", "")))
+        lines.append(
+            "Interpretation rules: Treat stress scores as heuristic summaries, not validated drought forecasts. "
+            "A lower score alone does not prove field recovery; inspect each indicator, dates, data completeness, "
+            "seasonality and proxy limitations. Vegetation proxy is not direct MODIS NDVI. Do not call a short-window "
+            "precipitation proxy standard SPI-3 unless its method and climatological calibration establish that."
+        )
+        messages.append({"role": "system", "content": "\\n".join(lines)})
     messages.append({"role": "user", "content": question})
 
     payload: dict[str, Any] = {
