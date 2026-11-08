@@ -436,7 +436,27 @@ async def reverse_geocode_location(
     lat_r = round(final_lat, 4)
     lon_r = round(final_lon, 4)
 
-    # 1. Attempt reverse lookup via Nominatim with bounded timeout
+    # Resolve coordinates near a curated point locally before using a public service.
+    best_loc = None
+    min_dist = float("inf")
+    for loc in GLOBAL_GAZETTEER:
+        distance = math.hypot(loc["latitude"] - lat_r, loc["longitude"] - lon_r)
+        if distance < min_dist:
+            min_dist = distance
+            best_loc = loc
+
+    if best_loc and min_dist < 0.25:
+        return {
+            "latitude": lat_r,
+            "longitude": lon_r,
+            "label": f"Near {best_loc['label']}",
+            "place": best_loc["name"],
+            "state": best_loc.get("region", ""),
+            "country": best_loc["country"],
+            "source": "Global Gazetteer",
+        }
+
+    # Only unresolved coordinates require a public reverse-geocoding request.
     nom_data = await _fetch_nominatim_reverse(lat_r, lon_r)
     if nom_data and isinstance(nom_data, dict) and ("address" in nom_data or "display_name" in nom_data):
         addr = nom_data.get("address", {}) if isinstance(nom_data.get("address"), dict) else {}
@@ -460,26 +480,6 @@ async def reverse_geocode_location(
             "state": state,
             "country": country,
             "source": "OpenStreetMap",
-        }
-
-    # 2. Fallback to nearest gazetteer point if within 0.25 degrees (~25 km)
-    best_loc = None
-    min_dist = float("inf")
-    for loc in GLOBAL_GAZETTEER:
-        d = math.hypot(loc["latitude"] - lat_r, loc["longitude"] - lon_r)
-        if d < min_dist:
-            min_dist = d
-            best_loc = loc
-
-    if best_loc and min_dist < 0.25:
-        return {
-            "latitude": lat_r,
-            "longitude": lon_r,
-            "label": f"Near {best_loc['label']}",
-            "place": best_loc["name"],
-            "state": best_loc.get("region", ""),
-            "country": best_loc["country"],
-            "source": "Global Gazetteer",
         }
 
     # 3. Coordinate label
