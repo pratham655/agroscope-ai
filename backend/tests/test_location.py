@@ -571,19 +571,27 @@ def test_nominatim_request_uses_project_identity_not_unowned_nasa_email():
     assert "nasa.gov" not in location_api._NOMINATIM_USER_AGENT
 
 
-def test_real_slow_nominatim_request_is_cancelled_by_total_timeout():
+def test_real_slow_nominatim_request_is_cancelled_by_total_timeout(monkeypatch):
     from app.api import location as location_api
     location_api._nominatim_cache.clear()
+    monkeypatch.setattr(location_api, "_NOMINATIM_TOTAL_TIMEOUT_S", 0.01)
 
     async def slow_request(*args, **kwargs):
         await asyncio.sleep(0.2)
         return httpx.Response(200, json=[])
 
-    async def immediate_timeout(awaitable, timeout):
-        if hasattr(awaitable, "close"):
-            awaitable.close()
-        raise asyncio.TimeoutError
-
-    with patch("httpx.AsyncClient.get", new=slow_request), patch.object(location_api.asyncio, "wait_for", new=immediate_timeout):
+    with patch("httpx.AsyncClient.get", new=slow_request):
+        started = time.perf_counter()
         result = asyncio.run(location_api._fetch_nominatim_search("slow upstream regression", limit=4))
+        elapsed = time.perf_counter() - started
         assert result == []
+        assert elapsed < 0.15
+
+
+def test_reverse_geocode_curated_point_does_not_call_public_nominatim():
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        response = client.get("/api/location/reverse-geocode", params={"latitude": MUMBAI_LAT, "longitude": MUMBAI_LON})
+        assert response.status_code == 200
+        assert response.json()["place"] == "Mumbai"
+        assert response.json()["source"] == "Global Gazetteer"
+        assert mock_get.await_count == 0
