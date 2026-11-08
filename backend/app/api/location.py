@@ -441,6 +441,7 @@ def _normalize_text(text: str) -> str:
 # Serialize calls in-process and cache successful responses to protect the service.
 _NOMINATIM_MIN_INTERVAL_S = 1.05
 _NOMINATIM_CACHE_TTL_S = 300
+_NOMINATIM_CACHE_MAX_ENTRIES = 512
 _NOMINATIM_TOTAL_TIMEOUT_S = 7.0
 _nominatim_gate = threading.Lock()
 _nominatim_last_request_at = 0.0
@@ -461,7 +462,13 @@ def _cache_get(key: tuple):
 
 def _cache_set(key: tuple, value: Any) -> None:
     with _nominatim_cache_lock:
-        _nominatim_cache[key] = (time.monotonic() + _NOMINATIM_CACHE_TTL_S, value)
+        now = time.monotonic()
+        expired = [cache_key for cache_key, (expires_at, _) in _nominatim_cache.items() if expires_at <= now]
+        for cache_key in expired:
+            _nominatim_cache.pop(cache_key, None)
+        while len(_nominatim_cache) >= _NOMINATIM_CACHE_MAX_ENTRIES and key not in _nominatim_cache:
+            _nominatim_cache.pop(next(iter(_nominatim_cache)))
+        _nominatim_cache[key] = (now + _NOMINATIM_CACHE_TTL_S, value)
 
 
 def _wait_for_nominatim_slot() -> None:
@@ -475,7 +482,10 @@ def _wait_for_nominatim_slot() -> None:
 
 
 def _is_broad_country_query(query: str) -> bool:
-    tokens = [t for t in re.split(r"[^\w]+", _normalize_text(query.strip())) if len(t) >= 2]
+    normalized = _normalize_text(query.strip())
+    if normalized in _BROAD_COUNTRIES:
+        return True
+    tokens = [t for t in re.split(r"[^\w]+", normalized) if len(t) >= 2]
     return len(tokens) == 1 and tokens[0] in _BROAD_COUNTRIES
 
 def _format_coord_label(lat: float, lon: float) -> str:
