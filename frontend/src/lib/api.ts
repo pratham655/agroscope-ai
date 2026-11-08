@@ -399,6 +399,7 @@ export interface CopilotChatPayload {
   data_longitude?: number;
   data_retrieval_timestamp?: string;
   advisor_context?: Record<string, unknown> | null;
+  change_detection_context?: ChangeDetectionResult | null;
 }
 
 export interface CopilotChatResponse {
@@ -440,6 +441,7 @@ export async function askCopilot(
       data_longitude: param.data_longitude || undefined,
       data_retrieval_timestamp: param.data_retrieval_timestamp || undefined,
       advisor_context: param.advisor_context || null,
+      change_detection_context: param.change_detection_context || null,
     };
   } else {
     body = {

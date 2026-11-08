@@ -104,6 +104,12 @@ export default function ChangeDetectivePage() {
         windowDays,
       });
       setResult(data);
+      // Share the exact comparison payload with the Copilot without coupling page components.
+      try {
+        sessionStorage.setItem("agroscope:change-detection-context", JSON.stringify({ ...data, saved_at: new Date().toISOString() }));
+      } catch {
+        // Storage can be unavailable; Change Detective itself remains fully functional.
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to execute change detection comparison.");
     } finally {
