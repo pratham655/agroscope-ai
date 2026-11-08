@@ -307,6 +307,19 @@ export default function AdvisorPage() {
         data_longitude: data ? data.location.longitude : undefined,
         data_retrieval_timestamp: data ? new Date().toISOString() : undefined,
         advisor_context: data as unknown as Record<string, unknown> | null,
+        change_detection_context: (() => {
+          try {
+            const raw = sessionStorage.getItem("agroscope:change-detection-context");
+            if (!raw) return null;
+            const parsed = JSON.parse(raw) as Record<string, unknown>;
+            const location = parsed.location as { latitude?: number; longitude?: number } | undefined;
+            if (!location || typeof location.latitude !== "number" || typeof location.longitude !== "number") return null;
+            if (Math.abs(location.latitude - latN) > 0.1 || Math.abs(location.longitude - lonN) > 0.1) return null;
+            return parsed as unknown as import("@/lib/api").ChangeDetectionResult;
+          } catch {
+            return null;
+          }
+        })(),
       });
 
       setChatMessages((prev) => [
