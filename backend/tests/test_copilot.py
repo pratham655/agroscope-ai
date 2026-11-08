@@ -252,12 +252,19 @@ class TestCopilotChatEndpoint:
             },
         )
 
-    def test_invalid_question_too_short(self):
-        resp = self._post("hi")
-        assert resp.status_code == 422
+    def test_short_question_is_accepted(self):
+        """Short conversational messages such as 'hi' must pass request validation."""
+        with patch("app.api.copilot.openrouter_chat", side_effect=or_service.OpenRouterKeyMissingError()):
+            resp = self._post("hi")
+        assert resp.status_code == 200
+        assert "reply" in resp.json()
 
     def test_invalid_question_empty(self):
         resp = self._post("")
+        assert resp.status_code == 422
+
+    def test_invalid_question_whitespace_only(self):
+        resp = self._post("   ")
         assert resp.status_code == 422
 
     def test_question_too_long(self):
