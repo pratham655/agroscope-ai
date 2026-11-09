@@ -7,6 +7,7 @@ any response payload or server logs.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -327,7 +328,23 @@ async def openrouter_chat(
 
     try:
         async with httpx.AsyncClient(timeout=settings.OPENROUTER_TIMEOUT_S) as client:
-            resp = await client.post(_CHAT_URL, json=payload, headers=headers)
+            for attempt in range(settings.OPENROUTER_MAX_RETRIES + 1):
+                resp = await client.post(_CHAT_URL, json=payload, headers=headers)
+                if resp.status_code != 429 or attempt >= settings.OPENROUTER_MAX_RETRIES:
+                    break
+
+                # Respect provider guidance when available; otherwise use bounded
+                # exponential backoff. This is a retry policy, not a local rate cap.
+                retry_after = resp.headers.get("Retry-After")
+                try:
+                    delay = min(max(float(retry_after), 0.0), 10.0) if retry_after else min(2 ** attempt, 10.0)
+                except (TypeError, ValueError):
+                    delay = min(2 ** attempt, 10.0)
+                logger.info(
+                    "OpenRouter returned 429; retrying attempt %d/%d after %.1fs",
+                    attempt + 1, settings.OPENROUTER_MAX_RETRIES, delay,
+                )
+                await asyncio.sleep(delay)
     except httpx.TimeoutException as exc:
         logger.warning("OpenRouter timeout: %s", exc)
         raise OpenRouterUnavailableError("OpenRouter request timed out.") from exc

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     OPENROUTER_MAX_TOKENS: int = 1800
     # HTTP timeout for the OpenRouter request (seconds)
     OPENROUTER_TIMEOUT_S: float = 60.0
+    # Bounded retries for transient upstream 429 responses (not a request quota).
+    OPENROUTER_MAX_RETRIES: int = 2
 
     # CORS — add your Vercel / local frontend origin
     ALLOWED_ORIGINS: List[str] = [
