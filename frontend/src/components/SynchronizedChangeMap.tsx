@@ -113,15 +113,16 @@ export default function SynchronizedChangeMap({
         zoomControl: true,
       });
 
-      // Underlay base OSM
+      // Keep a fully visible cartographic underlay so the viewport remains useful
+      // when a historical NASA tile is unavailable for a particular date/region.
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
-        opacity: 0.3,
+        opacity: 1,
         maxZoom: 18,
       }).addTo(m1);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
-        opacity: 0.3,
+        opacity: 1,
         maxZoom: 18,
       }).addTo(m2);
 
@@ -171,6 +172,21 @@ export default function SynchronizedChangeMap({
 
       map1Obj.current = m1;
       map2Obj.current = m2;
+
+      // Leaflet may initialize while the responsive grid is still settling.
+      // Recalculate both viewport sizes after the browser has laid them out.
+      window.requestAnimationFrame(() => {
+        if (!isCancelled) {
+          m1.invalidateSize({ pan: false });
+          m2.invalidateSize({ pan: false });
+        }
+      });
+      window.setTimeout(() => {
+        if (!isCancelled) {
+          m1.invalidateSize({ pan: false });
+          m2.invalidateSize({ pan: false });
+        }
+      }, 250);
     });
 
     return () => {
@@ -275,7 +291,7 @@ export default function SynchronizedChangeMap({
       {/* Side-by-Side Synchronized Map Panels */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Map Panel 1 (Baseline) */}
-        <div className="relative rounded-3xl overflow-hidden border border-[#d2e4d0] shadow-md bg-[#0f1f14]">
+        <div className="relative min-h-[360px] rounded-3xl overflow-hidden border border-[#d2e4d0] shadow-md bg-[#0f1f14]">
           <div className="absolute top-3 left-3 z-[400] bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-xs text-white flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-blue-400"></span>
             <span className="font-bold">{period1Label}</span>
@@ -288,11 +304,11 @@ export default function SynchronizedChangeMap({
             </div>
           )}
 
-          <div ref={map1Ref} className="w-full h-[360px] sm:h-[420px] z-0" />
+          <div ref={map1Ref} className="w-full z-0" style={{ height: "420px", minHeight: "360px", width: "100%" }} />
         </div>
 
         {/* Map Panel 2 (Comparison) */}
-        <div className="relative rounded-3xl overflow-hidden border border-[#d2e4d0] shadow-md bg-[#0f1f14]">
+        <div className="relative min-h-[360px] rounded-3xl overflow-hidden border border-[#d2e4d0] shadow-md bg-[#0f1f14]">
           <div className="absolute top-3 left-3 z-[400] bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-xs text-white flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-purple-400"></span>
             <span className="font-bold">{period2Label}</span>
@@ -305,7 +321,7 @@ export default function SynchronizedChangeMap({
             </div>
           )}
 
-          <div ref={map2Ref} className="w-full h-[360px] sm:h-[420px] z-0" />
+          <div ref={map2Ref} className="w-full z-0" style={{ height: "420px", minHeight: "360px", width: "100%" }} />
         </div>
       </div>
     </div>
