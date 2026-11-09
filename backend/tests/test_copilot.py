@@ -583,3 +583,37 @@ class TestHistoricalComparisonContext:
         assert payload["location_match"] is False
         assert "different location" in payload["reply"]
         mocked.assert_not_called()
+
+
+    def test_http_429_retries_and_succeeds(self):
+        """Transient provider throttling is retried before returning a fallback."""
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"), \
+             patch.object(or_service.settings, "OPENROUTER_MAX_RETRIES", 2), \
+             patch("app.services.openrouter.asyncio.sleep", new=AsyncMock()):
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.post = AsyncMock(side_effect=[
+                httpx.Response(429, headers={"Retry-After": "0"}, text="Rate limited"),
+                _mock_or_response(_GOOD_REPLY),
+            ])
+            with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
+                result = asyncio.run(or_service.openrouter_chat("hello"))
+
+        assert result == _GOOD_REPLY
+        assert mock_client.post.await_count == 2
+
+    def test_http_429_stops_after_configured_retries(self):
+        """Persistent provider throttling fails cleanly after the bounded retry budget."""
+        with patch.object(or_service.settings, "OPENROUTER_API_KEY", "sk-or-test-123"), \
+             patch.object(or_service.settings, "OPENROUTER_MAX_RETRIES", 2), \
+             patch("app.services.openrouter.asyncio.sleep", new=AsyncMock()):
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client.post = AsyncMock(return_value=httpx.Response(429, text="Rate limited"))
+            with patch("app.services.openrouter.httpx.AsyncClient", return_value=mock_client):
+                with pytest.raises(or_service.OpenRouterUnavailableError, match="429"):
+                    asyncio.run(or_service.openrouter_chat("hello"))
+
+        assert mock_client.post.await_count == 3
