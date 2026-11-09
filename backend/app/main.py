@@ -8,7 +8,7 @@ and sets up global middleware.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 import logging
 
 from app.api import (
@@ -79,6 +79,23 @@ app.include_router(phenology.router,          prefix="/api/phenology",          
 app.include_router(risk_radar.router,         prefix="/api/risk",               tags=["Regional Agricultural Risk Radar"])
 app.include_router(field_boundary.router,     prefix="/api/field",              tags=["Field Boundary Intelligence"])
 app.include_router(location.router,           prefix="/api/location",           tags=["Universal Location Intelligence"])
+
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Return a small service landing response for the deployed API."""
+    return {
+        "service": "AGROSCOPE AI API",
+        "status": "ok",
+        "docs": "/api/docs",
+        "health": "/api/health",
+    }
+
+
+@app.get("/docs", include_in_schema=False)
+async def short_docs_redirect():
+    """Keep the conventional FastAPI docs URL as an alias."""
+    return RedirectResponse(url="/api/docs", status_code=307)
 
 
 @app.get("/api/health")
